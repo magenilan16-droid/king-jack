@@ -8,33 +8,30 @@ export const reducedMotion = () => typeof matchMedia !== 'undefined' && matchMed
 export const EASE_OUT = 'cubic-bezier(.2,.8,.2,1)';
 
 // מספר שרץ לערך החדש (כמו מונה בקזינו)
-export function useTween(value: number, ms = 450): number {
+export function useTween(value: number, ms = 450, delay = 0): number {
   const [shown, setShown] = useState(value);
-  const from = useRef(value);
+  const cur = useRef(value);
   const raf = useRef(0);
   useEffect(() => {
-    if (reducedMotion() || Math.abs(value - from.current) < 1) {
-      from.current = value;
+    cancelAnimationFrame(raf.current);
+    const from = cur.current;
+    if (reducedMotion() || Math.abs(value - from) < 1) {
+      cur.current = value;
       setShown(value);
       return;
     }
-    const start = performance.now();
-    const a = from.current;
+    const start = performance.now() + delay;
     const step = (t: number) => {
-      const k = Math.min(1, (t - start) / ms);
-      const e = 1 - Math.pow(1 - k, 3);
-      const v = Math.round(a + (value - a) * e);
+      const k = Math.max(0, Math.min(1, (t - start) / ms));
+      const v = Math.round(from + (value - from) * (1 - Math.pow(1 - k, 3)));
+      cur.current = v;
       setShown(v);
       if (k < 1) raf.current = requestAnimationFrame(step);
-      else from.current = value;
+      else cur.current = value;
     };
-    cancelAnimationFrame(raf.current);
     raf.current = requestAnimationFrame(step);
-    return () => {
-      cancelAnimationFrame(raf.current);
-      from.current = value;
-    };
-  }, [value, ms]);
+    return () => cancelAnimationFrame(raf.current);
+  }, [value, ms, delay]);
   return shown;
 }
 

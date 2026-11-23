@@ -470,3 +470,24 @@ html[data-nav='in']::view-transition-new(root) {
   --dx: 0px;
   --dy: -24cqh;
 }
+
+/* אחרי שהקופה עפה למנצח - היא נעלמת מהמרכז */
+.pk-pot.main.kj-pot-out {
+  animation: kjPotOut 320ms ease-in 480ms forwards;
+}
+@keyframes kjPotOut {
+  to {
+    opacity: 0;
+    scale: 0.8;
+  }
+}
+
+/* הפחתת תנועה: קלפים מופיעים מיד, בלי השהיה */
+@media (prefers-reduced-motion: reduce) {
+  .card.kj-deal,
+  .card.kj-flip,
+  .pk .pk-bet.kj-bet,
+  .pk-pot.main.kj-pot-out {
+    animation: none !important;
+  }
+}

@@ -1,8 +1,8 @@
 // הפעלת התראות: מנסה להפעיל, ואם משהו חוסם - מסביר בדיוק מה לעשות בטלפון הזה
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { enablePushFlow, getPushState, pushPermission, type PushState, type PushStatus } from '../lib/push';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { enablePushFlow, getPushState, markPushUnsaved, pushPermission, refreshPushIfGranted, type PushState, type PushStatus } from '../lib/push';
 import { gameCall } from '../lib/supabase';
-import { isIOS } from '../lib/platform';
+import { isIOS, isAndroid, isSamsungBrowser } from '../lib/platform';
 import { useI18n } from '../lib/i18n';
 import { Sheet, toast } from './ui';
 
@@ -11,7 +11,10 @@ export async function sendTestPush(tr: (he: string, en: string) => string) {
     const r = (await gameCall({ op: 'testPush' })) as { sent?: number; devices?: number };
     if (r?.sent) toast(tr('נשלחה התראת בדיקה. היא אמורה להופיע עכשיו.', 'Test notification sent. It should appear now.'), 'win');
     else if (r?.devices) toast(tr('המכשיר רשום אבל השליחה נכשלה. לחצו שוב על הפעלה.', 'Device is registered but sending failed. Tap turn on again.'), 'error');
-    else toast(tr('הטלפון הזה עוד לא רשום להתראות. לחצו על הפעלה.', "This phone isn't registered yet. Tap turn on."), 'error');
+    else {
+      markPushUnsaved();
+      toast(tr('הטלפון הזה עוד לא רשום להתראות. לחצו על הפעלה.', "This phone isn't registered yet. Tap turn on."), 'error');
+    }
   } catch (e) {
     toast((e as Error).message, 'error');
   }
@@ -23,6 +26,8 @@ export function usePushSetup(onInstall?: () => void) {
   // המצב האמיתי: "on" רק כשיש מנוי פעיל בטלפון הזה
   const [state, setState] = useState<PushState | null>(null);
   const [help, setHelp] = useState<{ status: PushStatus; detail?: string } | null>(null);
+  // בזמן הפעלה מהכפתור לא מפעילים במקביל גם מהאירועים
+  const running = useRef(false);
 
   const refresh = useCallback(async () => {
     setPerm(pushPermission());
@@ -31,18 +36,43 @@ export function usePushSetup(onInstall?: () => void) {
   useEffect(() => {
     refresh();
     // אחרי חזרה מההגדרות של הטלפון
-    const onVis = () => document.visibilityState === 'visible' && refresh();
+    const sync = async () => {
+      if (running.current) return;
+      if (pushPermission() === 'granted') {
+        const was = await getPushState();
+        await refreshPushIfGranted();
+        if (was === 'on') return refresh();
+        if ((await getPushState()) === 'on') {
+          setHelp(null);
+          toast(tr('ההתראות פעילות', 'Notifications are on'), 'win');
+        }
+      }
+      refresh();
+    };
+    const onVis = () => document.visibilityState === 'visible' && sync();
     document.addEventListener('visibilitychange', onVis);
+    // אישור שהגיע מאוחר (אחרי שהפסקנו לחכות) - נתפס כאן
+    let permStatus: PermissionStatus | null = null;
+    navigator.permissions
+      ?.query({ name: 'notifications' as PermissionName })
+      .then((st) => {
+        permStatus = st;
+        st.onchange = () => sync();
+      })
+      .catch(() => {});
     // אחרי הכניסה האפליקציה נרשמת בשקט - בודקים שוב בעוד רגע
     const t = setTimeout(refresh, 6000);
     return () => {
       document.removeEventListener('visibilitychange', onVis);
+      if (permStatus) permStatus.onchange = null;
       clearTimeout(t);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh]);
 
   const run = async () => {
-    const r = await enablePushFlow();
+    running.current = true;
+    const r = await enablePushFlow().finally(() => (running.current = false));
     await refresh();
     if (r.status === 'ok') {
       setHelp(null);
@@ -63,6 +93,18 @@ export function usePushSetup(onInstall?: () => void) {
     />
   );
   return { perm, state, on: state === 'on', run, sheet, openHelp: (status: PushStatus) => setHelp({ status }) };
+}
+
+const chromeIntent = () => `intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end`;
+
+function OpenInChrome() {
+  const { tr } = useI18n();
+  if (!isAndroid) return null;
+  return (
+    <a className="btn ghost block" href={chromeIntent()}>
+      {tr('פתיחה בכרום (הכי אמין בהתראות)', 'Open in Chrome (most reliable)')}
+    </a>
+  );
 }
 
 function Steps({ items }: { items: ReactNode[] }) {
@@ -162,7 +204,15 @@ function PushHelpSheet({
     body = (
       <>
         <p>{tr('פעם קודמת נבחר "חסום". משחררים את זה בהגדרות, וזה לוקח חצי דקה:', 'Someone tapped "Block" before. You can undo it in settings in half a minute:')}</p>
-        {isIOS ? (
+        {isSamsungBrowser ? (
+          <Steps
+            items={[
+              tr('בדפדפן סמסונג: תפריט ☰ ואז הגדרות', 'In Samsung Internet: menu ☰, then Settings'),
+              tr('אתרים והורדות, ואז הודעות', 'Sites and downloads, then Notifications'),
+              tr('מצאו את King Jack (github.io) וסמנו "אפשר"', 'Find King Jack (github.io) and set Allow'),
+            ]}
+          />
+        ) : isIOS ? (
           <Steps
             items={[
               tr('פתחו את ההגדרות של האייפון', 'Open iPhone Settings'),
@@ -179,10 +229,26 @@ function PushHelpSheet({
             ]}
           />
         )}
-        <p className="muted">{tr('אחרי זה חזרו לכאן ולחצו "בדיקה".', 'Then come back here and tap "Check".')}</p>
+        <p className="hint">{tr('אחרי זה חזרו לכאן. ההתראות יופעלו לבד.', 'Then come back here. Notifications turn on by themselves.')}</p>
+        <OpenInChrome />
         <button className="btn primary block" onClick={retry} disabled={busy}>
           {busy ? <span className="spinner" /> : tr('בדיקה', 'Check')}
         </button>
+      </>
+    );
+  } else if (status === 'timeout' && isSamsungBrowser) {
+    title = tr('הטלפון לא הציג חלון אישור', "Your phone didn't show the prompt");
+    body = (
+      <>
+        <p>{tr('בדפדפן של סמסונג ההתראות לפעמים כבויות מראש. משחררים בשני מקומות:', 'Samsung Internet sometimes has notifications off by default. Two places to check:')}</p>
+        <Steps
+          items={[
+            tr('הגדרות הטלפון, אפליקציות, Samsung Internet, הודעות: להדליק', 'Phone Settings, Apps, Samsung Internet, Notifications: turn on'),
+            tr('בדפדפן סמסונג: ☰, הגדרות, אתרים והורדות, הודעות: "אפשר לאתרים לבקש"', 'In Samsung Internet: ☰, Settings, Sites and downloads, Notifications: "Allow sites to ask"'),
+            tr('חזרו לכאן. ההתראות יופעלו לבד, או לחצו "נסו שוב"', 'Come back here. Notifications turn on by themselves, or tap "Try again"'),
+          ]}
+        />
+        <OpenInChrome />
       </>
     );
   } else if (status === 'timeout') {
@@ -218,6 +284,7 @@ function PushHelpSheet({
       <>
         <p>{tr('סגרו את האפליקציה לגמרי, פתחו מחדש ונסו שוב.', 'Close the app completely, reopen it and try again.')}</p>
         {detail && <p className="hint" dir="ltr">{detail}</p>}
+        <OpenInChrome />
       </>
     );
   }

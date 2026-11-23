@@ -9,22 +9,28 @@ import { useI18n } from '../lib/i18n';
 export function useChatNotifier(chat: ChatMsg[] | undefined, myId: string, open: boolean) {
   const [unread, setUnread] = useState(0);
   const [bubble, setBubble] = useState<ChatMsg | null>(null);
-  const last = useRef<number>(0);
+  // null = עוד לא נטען השולחן. בטעינה הראשונה מדלגים על ההיסטוריה (גם כשהיא ריקה)
+  const last = useRef<number | null>(null);
+  const hideT = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (!chat?.length) return;
-    const newest = chat[chat.length - 1];
-    if (last.current === 0) {
-      last.current = newest.at;
+    if (!chat) return;
+    const newestAt = chat.length ? chat[chat.length - 1].at : 0;
+    if (last.current === null) {
+      last.current = newestAt;
       return;
     }
-    const fresh = chat.filter((m) => m.at > last.current && m.id !== myId);
-    last.current = newest.at;
+    const from = last.current;
+    const fresh = chat.filter((m) => m.at > from);
     if (!fresh.length) return;
-    if (!open) setUnread((u) => u + fresh.length);
+    last.current = newestAt;
+    // מונה הודעות שלא נקראו - רק של אחרים. הבועה בשולחן - לכולם, גם להודעה שלי
+    const others = fresh.filter((m) => m.id !== myId).length;
+    if (!open && others) setUnread((u) => u + others);
     setBubble(fresh[fresh.length - 1]);
-    const t = setTimeout(() => setBubble(null), 3500);
-    return () => clearTimeout(t);
+    window.clearTimeout(hideT.current);
+    hideT.current = window.setTimeout(() => setBubble(null), 4000);
   }, [chat, myId, open]);
+  useEffect(() => () => window.clearTimeout(hideT.current), []);
   useEffect(() => {
     if (open) setUnread(0);
   }, [open]);
@@ -74,7 +80,15 @@ export function ChatSheet({
       </div>
       <div className="quick-chat">
         {theme.quickChat.map((q) => (
-          <button key={q} className="chip-btn" onClick={() => send(q)}>
+          <button
+            key={q}
+            className="chip-btn"
+            onClick={() => {
+              // הודעה מהירה: שולחים וסוגרים, כדי לראות את הבועה בשולחן
+              send(q);
+              onClose();
+            }}
+          >
             {q}
           </button>
         ))}

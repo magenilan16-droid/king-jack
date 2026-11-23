@@ -54,6 +54,8 @@ export type PushStatus = 'ok' | 'ios-install' | 'inapp' | 'unsupported' | 'denie
 export type PushState = 'on' | 'off' | 'denied' | 'install' | 'unsupported';
 
 const TIMEOUT = Symbol('timeout');
+// המנוי שהשרת אישר ששמר (כדי לא להציג "פעילות" כשהשמירה נכשלה)
+const SAVED = 'kj-push-saved';
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | typeof TIMEOUT> {
   return Promise.race([p, new Promise<typeof TIMEOUT>((r) => setTimeout(() => r(TIMEOUT), ms))]);
 }
@@ -82,7 +84,7 @@ export async function getPushState(): Promise<PushState> {
   try {
     const reg = swReg ?? (await navigator.serviceWorker.getRegistration());
     const sub = await reg?.pushManager.getSubscription();
-    return sub && sameKey(sub, b64ToBytes(VAPID)) ? 'on' : 'off';
+    return sub && sameKey(sub, b64ToBytes(VAPID)) && localStorage.getItem(SAVED) === sub.endpoint ? 'on' : 'off';
   } catch {
     return 'off';
   }
@@ -128,7 +130,8 @@ export async function enablePushFlow(): Promise<{ status: PushStatus; detail?: s
   try {
     // שום המתנה לפני חלון האישור - אחרת אייפון לא מציג אותו
     if (Notification.permission !== 'granted') {
-      const perm = await withTimeout(Notification.requestPermission(), 20000);
+      // באייפון החלון תמיד מופיע - מחכים כמה שצריך. באנדרואיד הוא לפעמים חסום בשקט
+      const perm = isIOS ? await Notification.requestPermission() : await withTimeout(Notification.requestPermission(), 12000);
       if (perm === TIMEOUT) return done('timeout');
       if (perm === 'denied') return done('denied');
       if (perm !== 'granted') return done('dismissed');
@@ -157,7 +160,16 @@ async function saveSubscription(sub: PushSubscription) {
     p_p256dh: j.keys?.p256dh,
     p_auth: j.keys?.auth,
   });
-  if (error) throw new Error(tr('שמירת ההתראות נכשלה', 'Failed to save notification settings') + ` (${error.message})`);
+  if (error) {
+    localStorage.removeItem(SAVED);
+    throw new Error(tr('שמירת ההתראות נכשלה', 'Failed to save notification settings') + ` (${error.message})`);
+  }
+  localStorage.setItem(SAVED, sub.endpoint);
+}
+
+// השרת לא מכיר את המכשיר (למשל מחק מנוי ישן) - מסמנים כ"כבוי" כדי שיופיע כפתור הפעלה
+export function markPushUnsaved() {
+  localStorage.removeItem(SAVED);
 }
 
 // ביציאה מהחשבון: המכשיר הזה מפסיק לקבל התראות של המשתמש שיצא
@@ -166,6 +178,7 @@ export async function forgetPushOnThisDevice() {
     if (!('serviceWorker' in navigator)) return;
     const reg = swReg ?? (await navigator.serviceWorker.getRegistration());
     const sub = await reg?.pushManager.getSubscription();
+    localStorage.removeItem(SAVED);
     if (sub) await supabase.from('game_push_subs').delete().eq('endpoint', sub.endpoint);
   } catch {
     /* ignore */
@@ -180,7 +193,8 @@ export async function refreshPushIfGranted() {
     if (reg === TIMEOUT) return;
     const sub = await reg.pushManager.getSubscription();
     if (sub && sameKey(sub, b64ToBytes(VAPID))) await saveSubscription(sub);
-    else if (!isIOS) {
+    else {
+      // באנדרואיד עובד בלי לחיצה. באייפון אולי ייכשל - אז יופיע כפתור "הפעלה"
       const s = await withTimeout(subscribe(reg, b64ToBytes(VAPID)), 20000);
       if (s !== TIMEOUT) await saveSubscription(s);
     }

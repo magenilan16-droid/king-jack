@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Eye, EyeOff, Download } from 'lucide-react';
 import { login, register } from '../lib/supabase';
-import { AVATARS } from '../lib/themes';
+import { AvatarPicker } from '../components/Pickers';
 import { useI18n } from '../lib/i18n';
 import { toast } from '../components/ui';
 
@@ -89,13 +89,7 @@ export function Login({ onInstall }: { onInstall: () => void }) {
         {mode === 'register' && (
           <div>
             <div className="label">{tr('בחרו דמות', 'Pick an avatar')}</div>
-            <div className="avatar-grid">
-              {AVATARS.map((a) => (
-                <button type="button" key={a} className={`avatar-opt ${a === avatar ? 'active' : ''}`} onClick={() => setAvatar(a)}>
-                  {a}
-                </button>
-              ))}
-            </div>
+            <AvatarPicker name={name.trim()} value={avatar} onChange={setAvatar} />
           </div>
         )}
         <button className="btn primary block big" disabled={busy}>

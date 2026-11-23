@@ -137,7 +137,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
         <div className="hh-pots">
           {rec.pots.map((pot, i) => (
             <span key={i} className="pot-tag">
-              {i === 0 ? tr('ראשית', 'Main') : tr(`צדדית ${i}`, `Side ${i}`)} {fmt(pot.amount)} → {pot.winners.map(name).join(', ')}
+              {i === 0 ? tr('ראשית', 'Main') : tr(`צדדית ${i}`, `Side ${i}`)} {fmt(pot.amount)} {lang === 'he' ? '←' : '→'} {pot.winners.map(name).join(', ')}
             </span>
           ))}
         </div>

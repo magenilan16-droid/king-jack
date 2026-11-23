@@ -29,7 +29,7 @@ export interface LedgerRow {
 
 export function useRoom(roomId: string, myId: string) {
   const [room, setRoom] = useState<RoomRow | null>(null);
-  const [hole, setHole] = useState<Card[]>([]);
+  const [priv, setPriv] = useState<{ hole: Card[]; hand?: number }>({ hole: [] });
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
   const [connected, setConnected] = useState(true);
 
@@ -40,7 +40,8 @@ export function useRoom(roomId: string, myId: string) {
       supabase.from('game_ledger').select('id, user_id, bot_name, kind, amount').eq('room_id', roomId).order('id'),
     ]);
     if (r.data) setRoom((old) => (old && old.version > r.data.version ? old : (r.data as RoomRow)));
-    setHole(((p.data?.data as { hole?: Card[] })?.hole) ?? []);
+    const pd = p.data?.data as { hole?: Card[]; hand?: number } | undefined;
+    setPriv({ hole: pd?.hole ?? [], hand: pd?.hand });
     if (l.data) setLedger(l.data as LedgerRow[]);
   }, [roomId, myId]);
 
@@ -53,8 +54,8 @@ export function useRoom(roomId: string, myId: string) {
         setRoom((old) => (old && old.version >= row.version ? old : row));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'game_private', filter: `room_id=eq.${roomId}` }, (pl) => {
-        const row = pl.new as { user_id: string; data: { hole?: Card[] } };
-        if (row.user_id === myId) setHole(row.data?.hole ?? []);
+        const row = pl.new as { user_id: string; data: { hole?: Card[]; hand?: number } };
+        if (row.user_id === myId) setPriv({ hole: row.data?.hole ?? [], hand: row.data?.hand });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_ledger', filter: `room_id=eq.${roomId}` }, (pl) => {
         setLedger((old) => (old.some((x) => x.id === (pl.new as LedgerRow).id) ? old : [...old, pl.new as LedgerRow]));
@@ -98,5 +99,7 @@ export function useRoom(roomId: string, myId: string) {
     };
   }, [roomId, myId, refresh]);
 
+  const handNo = (room?.state as { handNo?: number } | undefined)?.handNo;
+  const hole = priv.hand == null || priv.hand === handNo ? priv.hole : [];
   return { room, hole, ledger, refresh, connected };
 }

@@ -1,7 +1,8 @@
 // מסך פרופיל והגדרות
 import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, Volume2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase, type Profile as P } from '../lib/supabase';
-import { allThemes, AVATARS, type Theme, type ThemeId } from '../lib/themes';
+import { allThemes, type Theme, type ThemeId } from '../lib/themes';
+import { AvatarPicker, ThemePicker } from '../components/Pickers';
 import { isIOS, isStandalone } from '../lib/platform';
 import { usePushSetup, sendTestPush } from '../components/PushSetup';
 import { forgetPushOnThisDevice } from '../lib/push';
@@ -54,21 +55,14 @@ export function ProfileScreen({
 
         <div className="list-label">{tr('הדמות שלי', 'My avatar')}</div>
         <div className="card-group">
-          <div className="avatar-grid">
-            {AVATARS.map((a) => (
-              <button
-                key={a}
-                className={`avatar-opt ${a === profile.avatar ? 'active' : ''}`}
-                aria-pressed={a === profile.avatar}
-                onClick={async () => {
-                  await supabase.rpc('game_update_profile', { p_name: profile.name, p_avatar: a });
-                  onProfileChange();
-                }}
-              >
-                {a}
-              </button>
-            ))}
-          </div>
+          <AvatarPicker
+            name={profile.name}
+            value={profile.avatar}
+            onChange={async (a) => {
+              await supabase.rpc('game_update_profile', { p_name: profile.name, p_avatar: a });
+              onProfileChange();
+            }}
+          />
         </div>
 
         <div className="list-label">{tr('שפה ומראה', 'Language & look')}</div>
@@ -82,14 +76,7 @@ export function ProfileScreen({
             </button>
           </div>
           <div className="group-title">{tr('ערכת נושא (רק בטלפון שלך)', 'Theme (only on your phone)')}</div>
-          <div className="theme-picker">
-            {allThemes(lang).map((t) => (
-              <button key={t.id} className={`theme-opt ${t.id === theme.id ? 'active' : ''}`} aria-pressed={t.id === theme.id} onClick={() => setTheme(t.id)}>
-                <span aria-hidden="true">{t.emoji}</span>
-                {t.name}
-              </button>
-            ))}
-          </div>
+          <ThemePicker themes={allThemes(lang)} value={theme.id} onChange={setTheme} />
         </div>
 
         <div className="list-label">{tr('משחק', 'Game')}</div>

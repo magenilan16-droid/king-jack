@@ -25,8 +25,10 @@ import { useRoom } from '../lib/useRoom';
 import { gameCall, type Profile } from '../lib/supabase';
 import type { Theme, ThemeId } from '../lib/themes';
 import { allThemes, pick } from '../lib/themes';
+import { ThemePicker } from '../components/Pickers';
+import { Avatar } from '../components/Avatar';
 import { vibrate } from '../lib/prefs';
-import { fmt } from '../lib/balances';
+import { fmt, signed } from '../lib/balances';
 import { useI18n } from '../lib/i18n';
 import { displayName } from '../lib/display';
 import { sfx, useMuted } from '../lib/sound';
@@ -43,6 +45,25 @@ import { BlackjackView } from './BlackjackView';
 import { HoldemView } from './HoldemView';
 import type { BJState } from '../engine/blackjack';
 import type { HState } from '../engine/holdem';
+
+// רווח הערב של שחקן: ז׳טונים (כולל מה שכרגע במשחק) + מה שכבר יצא - כל הקניות.
+// הקניות נספרות ממצב המשחק עצמו (buyCount) - כך אין "רווח" רגעי לשחקן שהצטרף לפני שהיומן הגיע
+function nightNet(
+  s: { kind: string; phase: string; settings: { buyIn: number }; buyCount?: Record<string, number> },
+  ledger: { user_id: string | null; kind: string; amount: number }[],
+  p: { id: string; isBot: boolean; chips: number },
+) {
+  const bought = (s.buyCount?.[p.id] ?? 1) * s.settings.buyIn;
+  const out = p.isBot ? 0 : ledger.filter((l) => l.user_id === p.id && l.kind === 'cashout').reduce((a, r) => a + Number(r.amount), 0);
+  const pending = Number((p as { pending?: number }).pending ?? 0);
+  const running = s.kind === 'holdem' ? s.phase !== 'waiting' && s.phase !== 'showdown' : s.phase === 'playing';
+  const inPlay = !running
+    ? 0
+    : s.kind === 'holdem'
+      ? Number((p as { total?: number }).total ?? 0)
+      : ((p as { hands?: { bet: number }[] }).hands ?? []).reduce((a, h) => a + h.bet, 0);
+  return { net: p.chips + pending + inPlay + out - bought, bought };
+}
 
 export function Table({
   roomId,
@@ -72,35 +93,32 @@ export function Table({
   const [closedTab, setClosedTab] = useState<'settle' | 'hands'>('settle');
   const s = room?.state;
   const chat = s?.chat ?? [];
-  const { unread, bubble } = useChatNotifier(chat, myId, sheet === 'chat');
+  const { unread, bubble } = useChatNotifier(s ? chat : undefined, myId, sheet === 'chat');
   // מלך הערב: מי הכי ברווח בשולחן הזה (מתעדכן רק בין ידיים)
   const [king, setKing] = useState<string | null>(null);
   const [kingCast, setKingCast] = useState<{ id: string; name: string; k: number } | null>(null);
   const kingReady = useRef(false);
   // בקשות "תראה!" של היד האחרונה
   const [showReq, setShowReq] = useState<{ hand: number; to: string; from: string[] } | null>(null);
+  const seenFx = useRef(new Set<string>());
   useEffect(() => {
-    const last = events[events.length - 1];
-    if (!last || last.kind !== 'showme') return;
-    setShowReq((cur) =>
-      cur && cur.hand === last.hand && cur.to === last.to
-        ? cur.from.includes(last.from)
-          ? cur
-          : { ...cur, from: [...cur.from, last.from] }
-        : { hand: last.hand, to: last.to, from: [last.from] },
-    );
+    for (const e of events) {
+      if (e.kind !== 'showme' || seenFx.current.has(e.id)) continue;
+      seenFx.current.add(e.id);
+      setShowReq((cur) =>
+        cur && cur.hand === e.hand && cur.to === e.to
+          ? cur.from.includes(e.from)
+            ? cur
+            : { ...cur, from: [...cur.from, e.from] }
+          : { hand: e.hand, to: e.to, from: [e.from] },
+      );
+    }
   }, [events]);
   useEffect(() => {
     if (!s) return;
     const settled = s.kind === 'holdem' ? s.phase === 'waiting' || s.phase === 'showdown' : s.phase === 'betting' || s.phase === 'results';
     if (!settled) return;
-    const nets = s.players.map((p) => {
-      const rows = ledger.filter((l) => (p.isBot ? !l.user_id && l.bot_name === p.name : l.user_id === p.id));
-      const bought = rows.filter((r) => r.kind === 'buyin').reduce((a, r) => a + Number(r.amount), 0);
-      const out = rows.filter((r) => r.kind === 'cashout').reduce((a, r) => a + Number(r.amount), 0);
-      const pending = 'pending' in p ? Number((p as { pending?: number }).pending ?? 0) : 0;
-      return { p, net: p.chips + pending + out - bought };
-    });
+    const nets = s.players.map((p) => ({ p, net: nightNet(s, ledger, p).net }));
     const best = Math.max(0, ...nets.map((n) => n.net));
     const top = nets.filter((n) => best > 0 && n.net === best);
     const next = !top.length ? null : top.some((t) => t.p.id === king) ? king : top[0].p.id;
@@ -213,6 +231,7 @@ export function Table({
   const hd = s.kind === 'holdem' ? (s as HState) : null;
   const themes = allThemes(lang);
   const targetP = target ? s.players.find((p) => p.id === target) : null;
+  const netOf = (p: { id: string; isBot: boolean; chips: number }) => nightNet(s, ledger, p);
   const turnId = hd ? hd.turnId : bj && bj.phase === 'playing' && bj.turn ? bj.players[bj.turn.p]?.id : null;
   const onSeatTap = (id: string) => {
     if (id === myId) return;
@@ -315,9 +334,31 @@ export function Table({
       <Sheet open={!!targetP} onClose={() => setTarget(null)} title={targetP ? displayName(targetP, lang) : ''}>
         {targetP && (
           <div className="player-menu">
-            <div className="pm-chips">
-              <Coins size={16} /> {fmt(targetP.chips)}
+            <div className="pm-card">
+              <span className="pm-av">
+                <Avatar name={targetP.name} emoji={targetP.avatar} bot={targetP.isBot} size={58} />
+                {king === targetP.id && (
+                  <span className="kj-crown">
+                    <Crown size={14} strokeWidth={2.4} />
+                  </span>
+                )}
+              </span>
+              <div className="pm-facts">
+                <div>
+                  <span>{tr('ז׳טונים', 'Chips')}</span>
+                  <b className="num">{fmt(targetP.chips)}</b>
+                </div>
+                <div>
+                  <span>{tr('הערב', 'Tonight')}</span>
+                  <b className={`num ${netOf(targetP).net > 0 ? 'pos' : netOf(targetP).net < 0 ? 'neg' : ''}`}>{signed(netOf(targetP).net)}</b>
+                </div>
+                <div>
+                  <span>{tr('קנה', 'Bought')}</span>
+                  <b className="num">{fmt(netOf(targetP).bought)}</b>
+                </div>
+              </div>
             </div>
+            {king === targetP.id && <div className="pm-king">{tr('מלך הערב, כרגע הכי ברווח בשולחן', 'King of the night, currently up the most')}</div>}
             <div className="label">{tr('לזרוק משהו', 'Throw something')}</div>
             <div className="throw-grid">
               {THROWABLES.map((it) => (
@@ -426,14 +467,7 @@ export function Table({
             English
           </button>
         </div>
-        <div className="theme-picker">
-          {themes.map((t) => (
-            <button key={t.id} className={`theme-opt ${t.id === theme.id ? 'active' : ''}`} aria-pressed={t.id === theme.id} onClick={() => setTheme(t.id)}>
-              <span aria-hidden="true">{t.emoji}</span>
-              {t.name}
-            </button>
-          ))}
-        </div>
+        <ThemePicker themes={themes} value={theme.id} onChange={setTheme} />
 
         {isHost && (
           <>

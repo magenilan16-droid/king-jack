@@ -94,6 +94,7 @@ export function HoldemView({
   const [quip, setQuip] = useState('');
   const [sweep, setSweep] = useState<{ id: string; x: number; y: number; amount: number; k: number }[]>([]);
   const prevBoard = useRef({ hand: s.handNo, len: s.board.length });
+  const boardDelay = useRef(new Map<string, number>());
   const total = turnMs(s.settings);
   const unit = Math.max(1, s.settings.sb);
 
@@ -107,6 +108,15 @@ export function HoldemView({
   const nDealt = Math.max(dealOrder.length, 1);
   // קלפים חדשים על הלוח: מאיזה אינדקס התחילו (כדי לפזר רק אותם בזמן)
   const boardFrom = prevBoard.current.hand === s.handNo ? prevBoard.current.len : 0;
+  const delayFor = (i: number) => {
+    const k = `${s.handNo}-${i}-${s.board[i]}`;
+    const m = boardDelay.current;
+    if (!m.has(k)) {
+      if (m.size > 40) m.clear();
+      m.set(k, Math.max(0, i - boardFrom) * 160 + (i >= 3 && boardFrom < 3 ? 250 : 0));
+    }
+    return m.get(k)!;
+  };
   const winnerIds = new Set(s.winners.map((w) => w.id));
   const winAmount = new Map(s.winners.map((w) => [w.id, w.amount]));
   const dealerId = s.players[s.dealerIdx]?.id;
@@ -222,7 +232,7 @@ export function HoldemView({
           <div className="pk-board">
             {Array.from({ length: 5 }).map((_, i) =>
               s.board[i] ? (
-                <Card key={i + s.board[i]} card={s.board[i]} size="md" deal flip delay={Math.max(0, i - boardFrom) * 160 + (i >= 3 && boardFrom < 3 ? 250 : 0)} />
+                <Card key={i + s.board[i]} card={s.board[i]} size="md" deal flip delay={delayFor(i)} />
               ) : (
                 <span key={i} className="pk-slot" />
               ),
@@ -260,6 +270,7 @@ export function HoldemView({
             dealIdx={dealIdx.get(p.id) ?? 0}
             nDealt={nDealt}
             isKing={kingId === p.id}
+            handNo={s.handNo}
             waiting={s.phase === 'waiting'}
             winAmount={winAmount.get(p.id)}
             deadline={s.turnId === p.id ? s.turnDeadline : null}
@@ -412,9 +423,15 @@ export function HoldemView({
                   </AsyncButton>
                 )}
                 {canRaise ? (
-                  <button className="pk-btn raise" onClick={() => (minTo >= maxTo ? act({ type: 'allin' }) : setRaiseOpen(true))}>
-                    {minTo >= maxTo ? theme.labels.allin : theme.labels.raise}
-                  </button>
+                  minTo >= maxTo ? (
+                    <AsyncButton className="pk-btn raise" onClick={() => act({ type: 'allin' })}>
+                      {theme.labels.allin}
+                    </AsyncButton>
+                  ) : (
+                    <button className="pk-btn raise" onClick={() => setRaiseOpen(true)}>
+                      {theme.labels.raise}
+                    </button>
+                  )
                 ) : (
                   <span />
                 )}
@@ -468,6 +485,7 @@ function Seat({
   dealIdx,
   nDealt,
   isKing,
+  handNo,
 }: {
   p: HPlayer;
   pos: { x: number; y: number };
@@ -483,8 +501,10 @@ function Seat({
   dealIdx: number;
   nDealt: number;
   isKing: boolean;
+  handNo: number;
 }) {
-  const chips = useTween(p.chips);
+  // מי שזכה: הערימה עולה רק כשהז׳טונים מהקופה מגיעים אליו
+  const chips = useTween(p.chips, 450, winAmount ? 1100 : 0);
   const out = p.folded || (!p.inHand && !waiting) || (waiting && (p.sitOut || p.chips <= 0));
   const kind = actionKind(p.lastAction);
   return (
@@ -499,7 +519,7 @@ function Seat({
       aria-label={displayName(p, lang)}
     >
       {!isMe && p.inHand && !p.folded && !p.shown && (
-        <span className="pk-backs" style={cq(CENTER.x - pos.x, CENTER.y - pos.y)}>
+        <span className="pk-backs" key={handNo} style={cq(CENTER.x - pos.x, CENTER.y - pos.y)}>
           <Card card={null} size="xs" deal delay={DEAL_BASE + dealIdx * DEAL_STEP} />
           <Card card={null} size="xs" deal delay={DEAL_BASE + (nDealt + dealIdx) * DEAL_STEP} />
         </span>
@@ -550,7 +570,7 @@ function Pots({ s, pot, unit, lang }: { s: HState; pot: number; unit: number; la
       <div className="pk-pots">
         {s.potResults!.map((r, i) => (
           <span key={i} className={`pk-pot ${i ? 'side' : ''}`}>
-            {i === 0 ? (he ? 'ראשית' : 'Main') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(r.amount)}</b> → {r.winners.map(nameOf).join(', ')}
+            {i === 0 ? (he ? 'ראשית' : 'Main') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(r.amount)}</b> {he ? '←' : '→'} {r.winners.map(nameOf).join(', ')}
           </span>
         ))}
       </div>
@@ -577,7 +597,7 @@ function Pots({ s, pot, unit, lang }: { s: HState; pot: number; unit: number; la
   if (pot <= 0) return <div className="pk-pots empty" />;
   return (
     <div className="pk-pots">
-      <span className="pk-pot main">
+      <span className={`pk-pot main ${s.phase === 'showdown' ? 'kj-pot-out' : ''}`}>
         <ChipStack amount={pot} unit={unit} size={16} label={false} />
         <b>{fmt(potShown)}</b>
       </span>

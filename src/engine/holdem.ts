@@ -672,6 +672,6 @@ function botDecision(f: HFull, p: HPlayer): HMove {
 }
 
 // מה כל שחקן מקבל באופן פרטי - הקלפים הסגורים שלו
-export function holdemPrivate(f: HFull, playerId: string): { hole: Card[] } {
-  return { hole: f.sec.holes[playerId] ?? [] };
+export function holdemPrivate(f: HFull, playerId: string): { hole: Card[]; hand: number } {
+  return { hole: f.sec.holes[playerId] ?? [], hand: f.pub.handNo };
 }
