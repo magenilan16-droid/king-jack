@@ -1,0 +1,472 @@
+/* ==========================================================================
+   King Jack - תנועה בסגנון קזינו
+   חלוקה מהדילר, היפוך קלפים, ז׳טונים שנדחפים ונאספים, קופה שעפה למנצח,
+   מעברים רכים בין מסכים וחלונות. רק transform/opacity, ומכבד הפחתת תנועה.
+   ========================================================================== */
+:root {
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-deal: cubic-bezier(0.18, 0.78, 0.24, 1);
+}
+
+/* אזור השולחן הוא "מיכל" - כך אפשר לחשב מרחקים באחוזים ממנו (cqw/cqh) */
+.pk-stage {
+  container-type: size;
+}
+
+/* ---------- קלפים: חלוקה והיפוך ---------- */
+.card.kj-deal {
+  animation: kjDeal 420ms var(--ease-deal) var(--d, 0ms) both;
+}
+.card.kj-flip {
+  animation: kjFlip 300ms ease-in-out var(--d, 0ms) both;
+}
+.card.kj-deal.kj-flip {
+  animation:
+    kjDeal 420ms var(--ease-deal) var(--d, 0ms) both,
+    kjFlip 300ms ease-in-out calc(var(--d, 0ms) + 360ms) both;
+}
+/* הגב של הקלף - נראה עד אמצע ההיפוך */
+.card.kj-flip::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  z-index: 5;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 50%, #a31d33 0 22%, transparent 23%),
+    repeating-linear-gradient(45deg, #7a1022 0 5px, #8f1729 5px 10px);
+  box-shadow: inset 0 0 0 2px #f3ede0;
+  animation: kjBackOff 300ms linear var(--d, 0ms) both;
+}
+.card.kj-deal.kj-flip::after {
+  animation-delay: calc(var(--d, 0ms) + 360ms);
+}
+@keyframes kjDeal {
+  from {
+    translate: var(--dx, 0px) var(--dy, -40px);
+    rotate: -16deg;
+    opacity: 0;
+  }
+  14% {
+    opacity: 1;
+  }
+  to {
+    translate: 0 0;
+    rotate: 0deg;
+    opacity: 1;
+  }
+}
+@keyframes kjFlip {
+  0% {
+    scale: 1 1;
+  }
+  50% {
+    scale: 0.04 1.04;
+  }
+  100% {
+    scale: 1 1;
+  }
+}
+@keyframes kjBackOff {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  51%,
+  100% {
+    opacity: 0;
+  }
+}
+/* מאיפה מגיעים הקלפים בבלאק ג׳ק: השו בפינה העליונה של השולחן */
+.bk-dealer .card {
+  --dx: 32cqw;
+  --dy: -4cqh;
+}
+.bk-me .card {
+  --dx: 34cqw;
+  --dy: -62cqh;
+}
+.bk-seat.l .card {
+  --dx: 60cqw;
+  --dy: -30cqh;
+}
+.bk-seat.r .card {
+  --dx: 8cqw;
+  --dy: -30cqh;
+}
+/* בהיסטוריה ובחלונות - בלי אנימציה */
+.hh-card .card,
+.sheet .card {
+  animation: none;
+}
+.hh-card .card::after,
+.sheet .card::after {
+  display: none;
+}
+
+/* ---------- ז׳טונים בשולחן ---------- */
+/* הימור: נדחף מהמושב קדימה */
+.pk .pk-bet.kj-bet {
+  animation: kjBetIn 340ms var(--ease-out) both;
+}
+@keyframes kjBetIn {
+  from {
+    translate: calc(var(--dx) * 1) calc(var(--dy) * 1);
+    scale: 0.7;
+    opacity: 0.2;
+  }
+}
+/* סוף סיבוב: נאסף לקופה */
+.pk .pk-bet.kj-sweep {
+  animation: kjSweep 460ms cubic-bezier(0.5, 0, 0.3, 1) forwards;
+  pointer-events: none;
+}
+@keyframes kjSweep {
+  to {
+    translate: var(--dx) var(--dy);
+    scale: 0.6;
+    opacity: 0;
+  }
+}
+/* הקופה עפה למנצח בקשת */
+.kj-potchip {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle, #e8c97a 0 30%, rgba(255, 255, 255, 0.85) 31% 36%, #c9a24a 37% 58%, transparent 59%),
+    repeating-conic-gradient(#f3ede0 0 20deg, #b58d34 20deg 60deg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  animation: kjPot 760ms cubic-bezier(0.3, 0.6, 0.25, 1) var(--d, 0ms) forwards;
+}
+@keyframes kjPot {
+  0% {
+    translate: 0 0;
+    scale: 1;
+    opacity: 1;
+  }
+  50% {
+    translate: calc(var(--dx) * 0.5) calc(var(--dy) * 0.5 - 34px);
+    scale: 1.15;
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    translate: var(--dx) var(--dy);
+    scale: 0.8;
+    opacity: 0;
+  }
+}
+.fly-chip {
+  display: none;
+}
+
+/* שכבת התנועה מעל המסך (ז׳טונים בין מקומות) */
+#kj-motion {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  pointer-events: none;
+}
+.kj-chip {
+  position: fixed;
+  border-radius: 50%;
+  will-change: transform, opacity;
+  background:
+    radial-gradient(circle, var(--c) 0 30%, rgba(255, 255, 255, 0.85) 31% 37%, var(--c) 38% 58%, transparent 59%),
+    repeating-conic-gradient(#f3ede0 0 20deg, var(--c) 20deg 60deg);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+.kj-clone {
+  position: fixed !important;
+  margin: 0 !important;
+  will-change: transform, opacity;
+  pointer-events: none;
+}
+
+/* ---------- מלך הערב ---------- */
+.kj-crown {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 3;
+  width: 22px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #1d1408;
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass));
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 36, 22, 0.6);
+  animation: kjCrownIn 520ms var(--ease-out) both;
+}
+@keyframes kjCrownIn {
+  from {
+    translate: -50% -14px;
+    scale: 0.4;
+    opacity: 0;
+  }
+}
+.kj-kingcast {
+  position: fixed;
+  left: 50%;
+  top: calc(62px + var(--safe-t));
+  translate: -50% 0;
+  z-index: 170;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 9px 16px 9px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: rgba(8, 18, 14, 0.95);
+  border: 1px solid rgba(201, 162, 74, 0.65);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
+  color: var(--ivory);
+  pointer-events: none;
+  animation: kjCast 2600ms var(--ease-out) forwards;
+}
+.kj-kingcast svg {
+  color: var(--brass-hi);
+  filter: drop-shadow(0 2px 8px rgba(201, 162, 74, 0.5));
+}
+.kj-kingcast b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 16px;
+  font-weight: 700;
+}
+.kj-kingcast span {
+  font-size: 13px;
+  color: var(--text-2);
+}
+@keyframes kjCast {
+  0% {
+    opacity: 0;
+    translate: -50% -16px;
+  }
+  12% {
+    opacity: 1;
+    translate: -50% 0;
+  }
+  85% {
+    opacity: 1;
+    translate: -50% 0;
+  }
+  100% {
+    opacity: 0;
+    translate: -50% -10px;
+  }
+}
+
+/* ---------- "תראה!" ---------- */
+.fx-chat.showme {
+  background: var(--brass);
+  color: #1d1408;
+  font-weight: 700;
+}
+.pk-btn.kj-showme {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.pk-btn.kj-asked {
+  animation: kjNudgeBtn 1.4s ease-in-out infinite;
+}
+@keyframes kjNudgeBtn {
+  50% {
+    box-shadow: 0 0 0 4px rgba(201, 162, 74, 0.35);
+  }
+}
+
+/* ---------- לחיצות: תגובה מיידית ---------- */
+.pk-btn,
+.menu-item,
+.room-card,
+.game-tile,
+.gp,
+.history-row,
+.person,
+.banner,
+.join-code-btn,
+.bk-chip,
+.throw-btn,
+.avatar-opt,
+.theme-opt,
+.seg button,
+.tabs button {
+  transition:
+    transform 90ms ease-out,
+    background-color 150ms,
+    box-shadow 150ms,
+    opacity 150ms;
+}
+.pk-btn:active:not(:disabled),
+.menu-item:active,
+.room-card:active,
+.history-row:active,
+.person:active,
+.banner:active,
+.join-code-btn:active,
+.throw-btn:active,
+.avatar-opt:active,
+.theme-opt:active {
+  transform: scale(0.97);
+}
+.bk-chip:active:not(:disabled) {
+  transform: scale(0.9) translateY(2px);
+}
+
+/* כפתור שממתין לשרת: הטקסט נשאר, פס דק רץ למטה */
+.is-busy {
+  position: relative;
+  overflow: hidden;
+  opacity: 0.85;
+}
+.is-busy::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 40%;
+  background: currentColor;
+  opacity: 0.55;
+  animation: kjBusy 0.9s ease-in-out infinite;
+}
+@keyframes kjBusy {
+  from {
+    translate: -100% 0;
+  }
+  to {
+    translate: 260% 0;
+  }
+}
+
+/* ---------- חלונות: נכנסים ויוצאים בהחלקה ---------- */
+.sheet {
+  animation: kjSheetIn 300ms var(--ease-out) both;
+}
+.sheet-backdrop {
+  animation: kjFade 220ms ease-out both;
+}
+.sheet-backdrop.closing {
+  animation: kjFadeOut 210ms ease-in forwards;
+  pointer-events: none;
+}
+.sheet-backdrop.closing .sheet {
+  animation: kjSheetOut 210ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+@keyframes kjSheetIn {
+  from {
+    translate: 0 100%;
+  }
+}
+@keyframes kjSheetOut {
+  to {
+    translate: 0 100%;
+  }
+}
+@keyframes kjFade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes kjFadeOut {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------- תוכן שמתחלף (לשוניות, רשימות) ---------- */
+.history,
+.leaderboard,
+.stat-grid,
+.transfers,
+.hand-history,
+.settle,
+.steps,
+.room-list > .room-card,
+.empty {
+  animation: kjFadeUp 240ms var(--ease-out) both;
+}
+@keyframes kjFadeUp {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+.toast {
+  animation: kjToast 260ms var(--ease-out) both;
+}
+@keyframes kjToast {
+  from {
+    opacity: 0;
+    translate: 0 -10px;
+    scale: 0.96;
+  }
+}
+
+/* ---------- מעבר בין מסכים (View Transitions) ---------- */
+.bottom-nav {
+  view-transition-name: kj-nav;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: var(--ease-out);
+}
+::view-transition-old(root) {
+  animation-name: kjVtOut;
+}
+::view-transition-new(root) {
+  animation-name: kjVtIn;
+}
+/* כניסה לשולחן: השולחן "מתקרב" */
+html[data-nav='in']::view-transition-new(root) {
+  animation-name: kjVtZoom;
+  animation-duration: 340ms;
+}
+@keyframes kjVtOut {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes kjVtIn {
+  from {
+    opacity: 0;
+    translate: 0 8px;
+  }
+}
+@keyframes kjVtZoom {
+  from {
+    opacity: 0;
+    scale: 1.04;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card.kj-flip::after {
+    display: none;
+  }
+  .kj-potchip,
+  .pk-bet.kj-sweep {
+    display: none;
+  }
+}
+
+.pk-board {
+  --dx: 0px;
+  --dy: -24cqh;
+}

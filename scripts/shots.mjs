@@ -42,7 +42,8 @@ await sheet().getByRole('button', { name: 'פתיחת שולחן', exact: true }
 await page.waitForSelector('.pk-table', { timeout: 20000 });
 await shot('04-holdem-waiting', 1500);
 await page.getByRole('button', { name: /התחלת יד/ }).click();
-await page.waitForTimeout(2500);
+await shot('04b-dealing', 750);
+await page.waitForTimeout(1800);
 let shotTurn = false;
 for (let i = 0; i < 12; i++) {
   const b = page.locator('.pk-btnrow.three .pk-btn.call').first();

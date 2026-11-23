@@ -1,13 +1,32 @@
+import type { CSSProperties } from 'react';
 import { SUIT_SYMBOL, rankLabel, type Card as C } from '../engine/cards';
 
 type Size = 'xs' | 'sm' | 'md' | 'lg';
 
 // קלף משחק: פינות כמו בחפיסה אמיתית, סמל במרכז, וגב עם כתר
-export function Card({ card, size = 'md', dim = false, delay = 0 }: { card: C | null; size?: Size; dim?: boolean; delay?: number }) {
-  const style = delay ? { animationDelay: `${delay}ms` } : undefined;
+// deal = הקלף מגיע מהדילר (המרחק נקבע ב- --dx / --dy של ההורה), flip = נחשף מהגב לפנים
+export function Card({
+  card,
+  size = 'md',
+  dim = false,
+  delay = 0,
+  deal = false,
+  flip = false,
+  style,
+}: {
+  card: C | null;
+  size?: Size;
+  dim?: boolean;
+  delay?: number;
+  deal?: boolean;
+  flip?: boolean;
+  style?: CSSProperties;
+}) {
+  const st = { ...(style ?? {}), '--d': `${delay}ms` } as CSSProperties;
+  const motion = `${deal ? 'kj-deal' : ''} ${flip && card ? 'kj-flip' : ''}`;
   if (!card)
     return (
-      <div className={`card back ${size}`} style={style}>
+      <div className={`card back ${size} ${motion}`} style={st}>
         <span className="back-logo">♛</span>
       </div>
     );
@@ -16,7 +35,7 @@ export function Card({ card, size = 'md', dim = false, delay = 0 }: { card: C | 
   const rank = rankLabel(card);
   const face = 'JQK'.includes(card[0]);
   return (
-    <div className={`card face-up ${size} ${red ? 'red' : ''} ${dim ? 'dim' : ''}`} style={style}>
+    <div className={`card face-up ${size} ${red ? 'red' : ''} ${dim ? 'dim' : ''} ${motion}`} style={st}>
       <span className="idx tl">
         <b>{rank}</b>
         <i>{suit}</i>

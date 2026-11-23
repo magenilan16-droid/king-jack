@@ -28,7 +28,7 @@ async function ensureVapid(): Promise<boolean> {
   const { data } = await admin.from('game_config').select('key, value').in('key', ['vapid_public', 'vapid_private']);
   const m = Object.fromEntries((data ?? []).map((r: { key: string; value: string }) => [r.key, r.value]));
   if (!m.vapid_public || !m.vapid_private) return false;
-  webpush.setVapidDetails('mailto:noreply@kingjack.app', m.vapid_public, m.vapid_private);
+  webpush.setVapidDetails('https://magenilan16-droid.github.io/king-jack/', m.vapid_public, m.vapid_private);
   vapidReady = true;
   return true;
 }
@@ -54,7 +54,7 @@ async function pushTo(userIds: string[], make: (lang: Lang) => Record<string, un
       } catch (e) {
         const code = (e as { statusCode?: number }).statusCode;
         if (code === 404 || code === 410) await admin.from('game_push_subs').delete().eq('endpoint', s.endpoint);
-        else console.error('push failed', code, (e as Error).message);
+        else console.error('push failed', code, new URL(s.endpoint).host, (e as Error).message, (e as { body?: string }).body ?? '');
       }
     }),
   );
@@ -310,13 +310,21 @@ Deno.serve(async (req) => {
 
     // התראת בדיקה לעצמי - כדי לוודא שההתראות עובדות בטלפון
     if (body.op === 'testPush') {
+      const { count: devices } = await admin.from('game_push_subs').select('endpoint', { count: 'exact', head: true }).eq('user_id', userId);
       const sent = await pushTo([userId], (lang) => ({
-        title: lang === 'he' ? '👑 King Jack - בדיקה' : '👑 King Jack - test',
-        body: lang === 'he' ? 'ההתראות עובדות! 🎉' : 'Notifications are working! 🎉',
+        title: lang === 'he' ? 'King Jack - בדיקה' : 'King Jack - test',
+        body: lang === 'he' ? 'ההתראות עובדות בטלפון הזה.' : 'Notifications work on this phone.',
         url: './',
         tag: 'test',
       }));
-      return json({ ok: true, sent });
+      console.log('testPush', userId.slice(0, 8), 'devices', devices, 'sent', sent);
+      return json({ ok: true, sent, devices: devices ?? 0 });
+    }
+
+    // דיווח מהטלפון על ניסיון הפעלת התראות (לאבחון)
+    if (body.op === 'pushDiag') {
+      console.log('pushDiag', JSON.stringify({ u: userId.slice(0, 8), status: body.status, detail: body.detail, standalone: body.standalone, perm: body.perm, ua: body.ua }));
+      return json({ ok: true });
     }
 
     // מחיקת שולחן מהלובי: אימון - נמחק לגמרי, כסף אמיתי - נסגר עם קיזוז (החובות נשמרים)

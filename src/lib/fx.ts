@@ -9,9 +9,14 @@ import { vibrate } from './prefs';
 export type FxEvent =
   | { kind: 'throw'; id: string; from: string; to: string; item: string }
   | { kind: 'emote'; id: string; from: string; emoji: string }
-  | { kind: 'nudge'; id: string; from: string; to: string };
+  | { kind: 'nudge'; id: string; from: string; to: string }
+  | { kind: 'showme'; id: string; from: string; to: string; hand: number };
 
-type FxInput = { kind: 'throw'; to: string; item: string } | { kind: 'emote'; emoji: string } | { kind: 'nudge'; to: string };
+type FxInput =
+  | { kind: 'throw'; to: string; item: string }
+  | { kind: 'emote'; emoji: string }
+  | { kind: 'nudge'; to: string }
+  | { kind: 'showme'; to: string; hand: number };
 
 export const THROWABLES = ['🍅', '🍺', '🌹', '💩', '🥚', '🔥', '💋', '🎂', '💸', '🧻'];
 export const EMOTES = ['😂', '😎', '🤯', '😭', '🤑', '🙏', '👏', '🔥', '🤡', '😴', '🫡', '🥶'];
@@ -32,6 +37,9 @@ export function useRoomFx(roomId: string, myId: string) {
       else if (e.kind === 'nudge' && e.to === myId) {
         sfx.nudge();
         vibrate([80, 60, 80, 60, 80]);
+      } else if (e.kind === 'showme') {
+        sfx.pop();
+        if (e.to === myId) vibrate([40, 30, 40]);
       }
     },
     [myId],

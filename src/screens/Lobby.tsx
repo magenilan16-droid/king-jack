@@ -200,16 +200,16 @@ export function Lobby({
             <Chev size={18} className="banner-chev" />
           </button>
         )}
-        {(isStandalone() || !isIOS) && push.perm !== 'granted' && (
+        {(isStandalone() || !isIOS) && push.state !== null && push.state !== 'on' && push.state !== 'unsupported' && (
           <div className="banner">
             <span className="banner-ic">
               <Bell size={19} />
             </span>
             <div className="grow">
-              <b>{push.perm === 'denied' ? tr('ההתראות חסומות', 'Notifications are blocked') : tr('התראות כבויות', 'Notifications are off')}</b>
+              <b>{push.state === 'denied' ? tr('ההתראות חסומות', 'Notifications are blocked') : tr('התראות כבויות', 'Notifications are off')}</b>
               <div className="sub">{tr('הזמנות, תור שלך וזירוזים מחברים', 'Invites, your turn and nudges from friends')}</div>
             </div>
-            {push.perm === 'denied' ? (
+            {push.state === 'denied' ? (
               <button className="btn small ghost" onClick={() => push.openHelp('denied')}>
                 {tr('איך משחררים', 'How to fix')}
               </button>

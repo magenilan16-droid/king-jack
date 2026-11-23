@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { chipBurst } from '../lib/motion';
 import {
   ArrowLeft,
   ArrowRight,
@@ -72,6 +73,56 @@ export function Table({
   const s = room?.state;
   const chat = s?.chat ?? [];
   const { unread, bubble } = useChatNotifier(chat, myId, sheet === 'chat');
+  // מלך הערב: מי הכי ברווח בשולחן הזה (מתעדכן רק בין ידיים)
+  const [king, setKing] = useState<string | null>(null);
+  const [kingCast, setKingCast] = useState<{ id: string; name: string; k: number } | null>(null);
+  const kingReady = useRef(false);
+  // בקשות "תראה!" של היד האחרונה
+  const [showReq, setShowReq] = useState<{ hand: number; to: string; from: string[] } | null>(null);
+  useEffect(() => {
+    const last = events[events.length - 1];
+    if (!last || last.kind !== 'showme') return;
+    setShowReq((cur) =>
+      cur && cur.hand === last.hand && cur.to === last.to
+        ? cur.from.includes(last.from)
+          ? cur
+          : { ...cur, from: [...cur.from, last.from] }
+        : { hand: last.hand, to: last.to, from: [last.from] },
+    );
+  }, [events]);
+  useEffect(() => {
+    if (!s) return;
+    const settled = s.kind === 'holdem' ? s.phase === 'waiting' || s.phase === 'showdown' : s.phase === 'betting' || s.phase === 'results';
+    if (!settled) return;
+    const nets = s.players.map((p) => {
+      const rows = ledger.filter((l) => (p.isBot ? !l.user_id && l.bot_name === p.name : l.user_id === p.id));
+      const bought = rows.filter((r) => r.kind === 'buyin').reduce((a, r) => a + Number(r.amount), 0);
+      const out = rows.filter((r) => r.kind === 'cashout').reduce((a, r) => a + Number(r.amount), 0);
+      const pending = 'pending' in p ? Number((p as { pending?: number }).pending ?? 0) : 0;
+      return { p, net: p.chips + pending + out - bought };
+    });
+    const best = Math.max(0, ...nets.map((n) => n.net));
+    const top = nets.filter((n) => best > 0 && n.net === best);
+    const next = !top.length ? null : top.some((t) => t.p.id === king) ? king : top[0].p.id;
+    if (next === king) {
+      kingReady.current = true;
+      return;
+    }
+    setKing(next);
+    const kp = top.find((t) => t.p.id === next)?.p;
+    if (kingReady.current && kp) {
+      const k = Date.now();
+      setKingCast({ id: kp.id, name: displayName(kp, lang), k });
+      sfx.chipStack();
+      if (kp.id === myId) {
+        vibrate([50, 40, 50, 40, 120]);
+        setTimeout(() => chipBurst(document.querySelector(`[data-pid="${CSS.escape(myId)}"]`), { count: 10 }), 300);
+      }
+      setTimeout(() => setKingCast((c) => (c?.k === k ? null : c)), 2600);
+    }
+    kingReady.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s, ledger]);
   const BackIcon = lang === 'he' ? ArrowRight : ArrowLeft;
 
   // בדיחה מתחלפת כל 25 שניות
@@ -113,6 +164,7 @@ export function Table({
   const canRebuy = !!me && canRebuyNow(s, myId) && left !== 0;
   const handKey = s.kind === 'holdem' ? (s as HState).lastHand?.no : (s as BJState).lastHand?.no;
   const act = async (move: Record<string, unknown>) => {
+    vibrate(10);
     await gameCall({ op: 'act', roomId, move });
     await refresh();
   };
@@ -221,6 +273,7 @@ export function Table({
             act={act}
             onRebuy={() => setSheet('rebuy')}
             onSeatTap={onSeatTap}
+            kingId={king}
           />
         ) : hd ? (
           <HoldemView
@@ -234,6 +287,9 @@ export function Table({
             act={act}
             onRebuy={() => setSheet('rebuy')}
             onSeatTap={onSeatTap}
+            kingId={king}
+            showReq={showReq}
+            askShow={(to) => send({ kind: 'showme', to, hand: hd.handNo })}
           />
         ) : null}
       </main>
@@ -247,6 +303,13 @@ export function Table({
       )}
 
       <FxLayer events={events} chatBubble={bubble} />
+      {kingCast && (
+        <div className="kj-kingcast" key={kingCast.k} role="status">
+          <Crown size={20} strokeWidth={2.2} />
+          <b dir="auto">{kingCast.name}</b>
+          <span>{tr('מלך הערב החדש', 'New king of the night')}</span>
+        </div>
+      )}
 
       {/* תפריט שחקן: זריקה וזירוז */}
       <Sheet open={!!targetP} onClose={() => setTarget(null)} title={targetP ? displayName(targetP, lang) : ''}>

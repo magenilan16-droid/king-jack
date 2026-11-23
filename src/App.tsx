@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, fetchProfile, type Profile } from './lib/supabase';
 import { useThemePref, useTipsPref, vibrate } from './lib/prefs';
@@ -41,10 +42,18 @@ export default function App() {
   const { tr, lang } = useI18n();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [route, setRoute] = useState<Route>(() => {
+  const [route, setRouteRaw] = useState<Route>(() => {
     const room = readParam(location.href, 'room');
     return room ? { name: 'table', roomId: room } : { name: 'lobby' };
   });
+  const setRoute = useCallback((r: Route) => {
+    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!doc.startViewTransition || reduce) return setRouteRaw(r);
+    document.documentElement.dataset.nav = r.name === 'table' ? 'in' : 'flat';
+    doc.startViewTransition(() => flushSync(() => setRouteRaw(r)));
+    window.scrollTo(0, 0);
+  }, []);
   const [pendingJoin, setPendingJoin] = useState<string | null>(() => readJoinParam(location.href));
   const [invite, setInvite] = useState<Invite | null>(null);
   const { theme, setTheme } = useThemePref();

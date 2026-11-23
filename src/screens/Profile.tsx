@@ -113,24 +113,28 @@ export function ProfileScreen({
           <AsyncButton
             className="menu-item"
             onClick={async () => {
-              if (push.perm === 'denied') push.openHelp('denied');
+              if (push.state === 'denied') push.openHelp('denied');
               else await push.run();
             }}
           >
             <span className="mi">
               <Bell size={19} /> {tr('התראות', 'Notifications')}
             </span>
-            <span className={`sub ${push.perm === 'granted' ? 'pos' : ''}`}>
-              {push.perm === 'granted'
-                ? tr('פעילות', 'On')
-                : push.perm === 'denied'
-                  ? tr('חסומות, איך משחררים', 'Blocked, how to fix')
-                  : isIOS && !isStandalone()
-                    ? tr('צריך להתקין קודם', 'Install first')
-                    : tr('כבויות, להפעלה', 'Off, tap to turn on')}
+            <span className={`sub ${push.on ? 'pos' : ''}`}>
+              {push.state === null
+                ? '…'
+                : push.on
+                  ? tr('פעילות בטלפון הזה', 'On for this phone')
+                  : push.state === 'denied'
+                    ? tr('חסומות, איך משחררים', 'Blocked, how to fix')
+                    : push.state === 'install' || (isIOS && !isStandalone())
+                      ? tr('צריך להתקין קודם', 'Install first')
+                      : push.state === 'unsupported'
+                        ? tr('לא נתמך בדפדפן הזה', 'Not supported here')
+                        : tr('כבויות, להפעלה', 'Off, tap to turn on')}
             </span>
           </AsyncButton>
-          {push.perm === 'granted' && (
+          {push.on && (
             <AsyncButton className="menu-item" onClick={() => sendTestPush(tr)}>
               <span className="mi">
                 <BellRing size={19} /> {tr('שליחת התראת בדיקה', 'Send a test notification')}

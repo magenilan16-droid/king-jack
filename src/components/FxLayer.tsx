@@ -54,6 +54,24 @@ export function FxLayer({ events, chatBubble }: { events: FxEvent[]; chatBubble:
             </span>
           );
         }
+        if (e.kind === 'showme') {
+          const a = centerOf(e.from);
+          const b = centerOf(e.to);
+          return (
+            <span key={e.id}>
+              {a && (
+                <span className="fx-chat showme" style={{ left: Math.min(Math.max(a.x, 60), window.innerWidth - 60), top: a.y - 34 }}>
+                  {document.documentElement.lang === 'en' ? 'Show!' : 'תראה!'}
+                </span>
+              )}
+              {b && (
+                <span className="fx-emote" style={{ left: b.x, top: b.y }}>
+                  👀
+                </span>
+              )}
+            </span>
+          );
+        }
         if (e.kind === 'nudge') {
           const b = centerOf(e.to);
           if (!b) return null;

@@ -17,6 +17,8 @@ import { useI18n, type Lang } from '../lib/i18n';
 import { displayName } from '../lib/display';
 import { sfx } from '../lib/sound';
 import { vibrate } from '../lib/prefs';
+import { useTween, flyChips, chipBurst } from '../lib/motion';
+import { Crown } from 'lucide-react';
 import { MAX_STRIKES, turnMs } from '../engine/common';
 
 type Act = (move: Record<string, unknown>) => Promise<void>;
@@ -71,6 +73,7 @@ export function BlackjackView({
   act,
   onRebuy,
   onSeatTap,
+  kingId,
 }: {
   s: BJState;
   roomId: string;
@@ -81,9 +84,11 @@ export function BlackjackView({
   act: Act;
   onRebuy: () => void;
   onSeatTap: (id: string) => void;
+  kingId?: string | null;
 }) {
   const { tr, lang } = useI18n();
   const me = s.players.find((p) => p.id === myId);
+  const myChips = useTween(me?.chips ?? 0);
   const isHost = s.hostId === myId;
   const banker = s.players.find((p) => p.id === s.bankerId);
   const amBanker = s.bankerId === myId;
@@ -113,17 +118,30 @@ export function BlackjackView({
     prev.current = s;
     if (!p) return;
     const count = (x: BJState) => x.dealer.cards.length + x.players.reduce((a, pl) => a + pl.hands.reduce((b, h) => b + h.cards.length, 0), 0);
-    if (s.round !== p.round && s.phase === 'playing') sfx.shuffle();
-    else if (count(s) > count(p)) sfx.card();
+    if (s.round !== p.round && s.phase === 'playing') {
+      sfx.shuffle();
+      const n = Math.min(14, count(s));
+      for (let k = 0; k < n; k++) setTimeout(() => sfx.card(), 380 + k * 110);
+    } else if (count(s) > count(p)) sfx.card();
     const readyNow = s.players.filter((x) => x.ready).length;
     if (s.phase === 'betting' && readyNow > p.players.filter((x) => x.ready).length) sfx.chips();
     if (s.phase === 'results' && p.phase !== 'results') {
+      // הדילר משלם למנצחים ואוסף מהמפסידים
+      const rack = document.querySelector('.bk-rack');
+      for (const pl of s.players) {
+        if (!pl.hands.length || pl.id === s.bankerId) continue;
+        const net = pl.hands.reduce((a, h) => a + (h.payout ?? 0) - h.bet, 0);
+        const spot = pl.id === myId ? document.querySelector('.bk-me .bk-circle') : document.querySelector(`.bk-seat[data-pid="${CSS.escape(pl.id)}"] .bk-spot`);
+        if (net > 0) flyChips(rack, spot, { count: pl.id === myId ? 7 : 3, delay: 700, color: '#c9a24a' });
+        else if (net < 0) flyChips(spot, rack, { count: pl.id === myId ? 5 : 2, delay: 700, color: '#b3452f' });
+      }
       const mine = s.players.find((x) => x.id === myId);
       if (mine?.hands.length) {
         const net = mine.hands.reduce((a, h) => a + (h.payout ?? 0) - h.bet, 0);
         if (net > 0) {
           sfx.win();
           vibrate([60, 40, 60, 40, 160]);
+          setTimeout(() => chipBurst(document.querySelector('.bk-me .bk-circle'), { count: 14 }), 1250);
         } else if (net < 0) sfx.lose();
       }
     }
@@ -158,6 +176,9 @@ export function BlackjackView({
       : { p, pos: rightSpots[circle.length - 1 - i], side: 'r' as const },
   );
 
+  const inRound = s.players.filter((p) => p.hands.length > 0);
+  const dealtBefore = inRound.length;
+  const myDealIdx = Math.max(0, inRound.findIndex((p) => p.id === myId));
   const dealerUp = s.dealer.cards;
   const dealerTotal = !s.dealer.hidden && dealerUp.length ? handValue(dealerUp).total : null;
   const myHands = me?.hands ?? [];
@@ -201,9 +222,9 @@ export function BlackjackView({
             {dealerUp.length > 0 ? (
               <div className="bk-cards">
                 {dealerUp.map((c, i) => (
-                  <Card key={i + c} card={c} size="md" delay={i < 2 ? i * 120 : 0} />
+                  <Card key={i + c} card={c} size="md" deal={i !== 1} flip delay={i === 0 ? 380 + dealtBefore * 110 : i === 1 ? 0 : (i - 2) * 420} />
                 ))}
-                {s.dealer.hidden && <Card card={null} size="md" />}
+                {s.dealer.hidden && <Card card={null} size="md" deal delay={380 + (dealtBefore * 2 + 1) * 110} />}
               </div>
             ) : (
               <div className="bk-cards">
@@ -228,6 +249,9 @@ export function BlackjackView({
             total={total}
             lang={lang}
             onTap={() => onSeatTap(p.id)}
+            isKing={kingId === p.id}
+            dealIdx={Math.max(0, inRound.findIndex((x) => x.id === p.id))}
+            nDealt={dealtBefore}
           />
         ))}
 
@@ -248,7 +272,7 @@ export function BlackjackView({
             {myHands.length > 0 && (
               <div className="bk-myhands">
                 {myHands.map((h, i) => (
-                  <HandView key={i} h={h} size={mySize} active={myTurn && s.turn?.h === i && myHands.length > 1} lang={lang} />
+                  <HandView key={i} h={h} size={mySize} active={myTurn && s.turn?.h === i && myHands.length > 1} lang={lang} dealAt={[380 + myDealIdx * 110, 380 + (dealtBefore + 1 + myDealIdx) * 110]} />
                 ))}
               </div>
             )}
@@ -268,10 +292,15 @@ export function BlackjackView({
               <span className="pk-av">
                 {myTurn && s.turnDeadline && <TurnRing deadline={s.turnDeadline} total={total} />}
                 <Avatar name={me.name} emoji={me.avatar} size={34} />
+                {kingId === myId && (
+                  <span className="kj-crown" title={tr('מלך הערב', 'King of the night')}>
+                    <Crown size={13} strokeWidth={2.4} />
+                  </span>
+                )}
               </span>
               <span className="bk-meplate-txt">
                 <span>{amBanker ? tr('אתם הבנק', "You're the bank") : tr('אני', 'Me')}</span>
-                <b>{fmt(me.chips)}</b>
+                <b>{fmt(myChips)}</b>
               </span>
             </div>
           </div>
@@ -296,9 +325,10 @@ export function BlackjackView({
                     <button
                       key={v}
                       className={`bk-chip c${i}`}
-                      onClick={() => {
+                      onClick={(e) => {
                         setBet((b) => Math.min(maxBet, b + v));
                         sfx.chips(1);
+                        flyChips(e.currentTarget, document.querySelector('.bk-me .bk-circle'), { clone: e.currentTarget, ms: 380 });
                       }}
                       disabled={bet + v > maxBet}
                       aria-label={`+${fmt(v)}`}
@@ -424,14 +454,14 @@ function ActionButtons({ me, hand, theme, act }: { me: BJPlayer; hand: BJHand; t
 }
 
 // יד אחת: קלפים, סכום ותוצאה
-function HandView({ h, size, active, lang }: { h: BJHand; size: Size; active: boolean; lang: Lang }) {
+function HandView({ h, size, active, lang, dealAt = [0, 110] }: { h: BJHand; size: Size; active: boolean; lang: Lang; dealAt?: number[] }) {
   const v = handValue(h.cards);
   const natural = isNatural(h);
   return (
     <div className={`bk-hand ${active ? 'active' : ''} ${h.result ? 'r-' + h.result : ''}`}>
       <div className={`bk-cards ${size}`}>
         {h.cards.map((c, i) => (
-          <Card key={i + c} card={c} size={size} delay={i < 2 ? i * 120 : 0} />
+          <Card key={i + c} card={c} size={size} deal flip delay={i < 2 ? dealAt[i] : 0} />
         ))}
       </div>
       <div className="bk-hmeta">
@@ -453,6 +483,9 @@ function Seat({
   total,
   lang,
   onTap,
+  isKing,
+  dealIdx,
+  nDealt,
 }: {
   p: BJPlayer;
   s: BJState;
@@ -463,8 +496,12 @@ function Seat({
   total: number;
   lang: Lang;
   onTap: () => void;
+  isKing: boolean;
+  dealIdx: number;
+  nDealt: number;
 }) {
   const isBanker = s.bankerId === p.id;
+  const chips = useTween(p.chips);
   const out = p.leaving || (s.phase !== 'betting' && !p.hands.length && !isBanker);
   return (
     <div
@@ -481,12 +518,17 @@ function Seat({
         <span className="pk-av">
           {isTurn && s.turnDeadline && <TurnRing deadline={s.turnDeadline} total={total} />}
           <Avatar name={p.name} emoji={p.avatar} bot={p.isBot} size={dense ? 32 : 38} />
+          {isKing && (
+            <span className="kj-crown" title={lang === 'he' ? 'מלך הערב' : 'King of the night'}>
+              <Crown size={12} strokeWidth={2.4} />
+            </span>
+          )}
         </span>
         <span className="pk-plate">
           <span className="pk-name" dir="auto">
             {displayName(p, lang)}
           </span>
-          <span className="pk-stack">{isBanker ? (lang === 'he' ? 'בנק' : 'Bank') : fmt(p.chips)}</span>
+          <span className="pk-stack">{isBanker ? (lang === 'he' ? 'בנק' : 'Bank') : fmt(chips)}</span>
         </span>
       </span>
       <span className="bk-spot">
@@ -495,7 +537,7 @@ function Seat({
               <span key={i} className={`bk-mini ${h.result ? 'r-' + h.result : ''}`}>
                 <span className="bk-cards sm">
                   {h.cards.map((c, k) => (
-                    <Card key={k + c} card={c} size={dense ? 'xs' : 'sm'} />
+                    <Card key={k + c} card={c} size={dense ? 'xs' : 'sm'} deal flip delay={k < 2 ? 380 + (k * (nDealt + 1) + dealIdx) * 110 : 0} />
                   ))}
                 </span>
                 <span className="bk-hmeta">

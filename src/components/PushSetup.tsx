@@ -1,6 +1,6 @@
 // הפעלת התראות: מנסה להפעיל, ואם משהו חוסם - מסביר בדיוק מה לעשות בטלפון הזה
-import { useState, type ReactNode } from 'react';
-import { enablePushFlow, pushPermission, type PushStatus } from '../lib/push';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { enablePushFlow, getPushState, pushPermission, type PushState, type PushStatus } from '../lib/push';
 import { gameCall } from '../lib/supabase';
 import { isIOS } from '../lib/platform';
 import { useI18n } from '../lib/i18n';
@@ -8,9 +8,10 @@ import { Sheet, toast } from './ui';
 
 export async function sendTestPush(tr: (he: string, en: string) => string) {
   try {
-    const r = (await gameCall({ op: 'testPush' })) as { sent?: number };
-    if (r?.sent) toast(tr('נשלחה התראת בדיקה - היא אמורה להופיע עכשיו', 'Test notification sent - it should appear now'), 'win');
-    else toast(tr('לא נמצא מכשיר רשום. לחצו שוב על הפעלת התראות', 'No registered device found. Tap enable notifications again'), 'error');
+    const r = (await gameCall({ op: 'testPush' })) as { sent?: number; devices?: number };
+    if (r?.sent) toast(tr('נשלחה התראת בדיקה. היא אמורה להופיע עכשיו.', 'Test notification sent. It should appear now.'), 'win');
+    else if (r?.devices) toast(tr('המכשיר רשום אבל השליחה נכשלה. לחצו שוב על הפעלה.', 'Device is registered but sending failed. Tap turn on again.'), 'error');
+    else toast(tr('הטלפון הזה עוד לא רשום להתראות. לחצו על הפעלה.', "This phone isn't registered yet. Tap turn on."), 'error');
   } catch (e) {
     toast((e as Error).message, 'error');
   }
@@ -19,11 +20,30 @@ export async function sendTestPush(tr: (he: string, en: string) => string) {
 export function usePushSetup(onInstall?: () => void) {
   const { tr } = useI18n();
   const [perm, setPerm] = useState(pushPermission());
+  // המצב האמיתי: "on" רק כשיש מנוי פעיל בטלפון הזה
+  const [state, setState] = useState<PushState | null>(null);
   const [help, setHelp] = useState<{ status: PushStatus; detail?: string } | null>(null);
+
+  const refresh = useCallback(async () => {
+    setPerm(pushPermission());
+    setState(await getPushState());
+  }, []);
+  useEffect(() => {
+    refresh();
+    // אחרי חזרה מההגדרות של הטלפון
+    const onVis = () => document.visibilityState === 'visible' && refresh();
+    document.addEventListener('visibilitychange', onVis);
+    // אחרי הכניסה האפליקציה נרשמת בשקט - בודקים שוב בעוד רגע
+    const t = setTimeout(refresh, 6000);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      clearTimeout(t);
+    };
+  }, [refresh]);
 
   const run = async () => {
     const r = await enablePushFlow();
-    setPerm(pushPermission());
+    await refresh();
     if (r.status === 'ok') {
       setHelp(null);
       toast(tr('ההתראות פעילות', 'Notifications are on'), 'win');
@@ -42,7 +62,7 @@ export function usePushSetup(onInstall?: () => void) {
       onInstall={onInstall}
     />
   );
-  return { perm, run, sheet, openHelp: (status: PushStatus) => setHelp({ status }) };
+  return { perm, state, on: state === 'on', run, sheet, openHelp: (status: PushStatus) => setHelp({ status }) };
 }
 
 function Steps({ items }: { items: ReactNode[] }) {
@@ -91,8 +111,8 @@ function PushHelpSheet({
         <p>{tr('אפל מאפשרת התראות רק לאפליקציה שמותקנת במסך הבית.', 'Apple only allows notifications for apps added to the home screen.')}</p>
         <Steps
           items={[
-            tr('פתחו את הקישור בספארי', 'Open the link in Safari'),
-            tr('כפתור השיתוף ואז "הוספה למסך הבית"', 'Tap Share, then "Add to Home Screen"'),
+            tr('פתחו את הקישור בספארי (או בכרום של האייפון)', 'Open the link in Safari (or Chrome on iPhone)'),
+            tr('כפתור השיתוף, ואז "הוספה למסך הבית"', 'Tap Share, then "Add to Home Screen"'),
             tr('פתחו את King Jack מהאייקון במסך הבית', 'Open King Jack from the home screen icon'),
             tr('הפעילו התראות מהלובי או מהפרופיל', 'Turn on notifications from the lobby or profile'),
           ]}
@@ -197,7 +217,7 @@ function PushHelpSheet({
     body = (
       <>
         <p>{tr('סגרו את האפליקציה לגמרי, פתחו מחדש ונסו שוב.', 'Close the app completely, reopen it and try again.')}</p>
-        {detail && <p className="muted small">{detail}</p>}
+        {detail && <p className="hint" dir="ltr">{detail}</p>}
       </>
     );
   }
