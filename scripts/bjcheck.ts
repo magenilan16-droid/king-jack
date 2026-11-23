@@ -36,7 +36,8 @@ for (const mode of ['house', 'player'] as const) {
     const sum = f.pub.players.reduce((a, p) => a + p.chips, 0) + f.pub.houseNet;
     if (Math.abs(sum - bought) > 0.01) throw new Error(`mismatch ${mode} r${r}: ${sum} vs ${bought}`);
     if (f.pub.phase !== 'results') throw new Error('phase ' + f.pub.phase);
-    act(f, 'h1', { type: 'next' }, 0);
+    // בוט שנגמר לו הכסף קם מהשולחן עם השארית - יוצא מהספירה
+    bought -= act(f, 'h1', { type: 'next' }, 0).effects.filter((e) => e.kind === 'cashout').reduce((a, e) => a + e.amount, 0);
   }
   console.log(mode, 'conserved OK, bot chips:', f.pub.players.find((p) => p.isBot)?.chips);
 }
