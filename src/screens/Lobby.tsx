@@ -50,9 +50,20 @@ export function Lobby({
       .eq('status', 'open')
       .order('created_at', { ascending: false })
       .limit(40);
-    const dayAgo = Date.now() - 24 * 3600 * 1000;
-    setRooms(((data ?? []) as LobbyRoom[]).filter((r) => r.state.players.some((p) => !p.isBot) || new Date(r.created_at).getTime() > dayAgo));
-  }, []);
+    const list = (data ?? []) as LobbyRoom[];
+    // שולחן נחשב פעיל אם נפתח, שוחקה בו יד או הייתה בו קנייה ב-6 השעות האחרונות
+    const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+    const ids = list.map((r) => r.id);
+    const active = new Set<string>();
+    if (ids.length) {
+      const [h, l] = await Promise.all([
+        supabase.from('game_hands').select('room_id').in('room_id', ids).gte('created_at', since),
+        supabase.from('game_ledger').select('room_id').in('room_id', ids).gte('created_at', since),
+      ]);
+      for (const r of [...(h.data ?? []), ...(l.data ?? [])]) active.add((r as { room_id: string }).room_id);
+    }
+    setRooms(list.filter((r) => r.created_at > since || active.has(r.id) || r.state.players.some((p) => p.id === profile.id)));
+  }, [profile.id]);
 
   useEffect(() => {
     load();

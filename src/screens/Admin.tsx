@@ -19,6 +19,7 @@ export function Admin({ profile, onBack }: { profile: Profile; onBack: () => voi
   const [rooms, setRooms] = useState<RoomLite[]>([]);
   const [q, setQ] = useState('');
   const [newPw, setNewPw] = useState<{ name: string; pw: string } | null>(null);
+  const [cleanHours, setCleanHours] = useState(3);
 
   const load = useCallback(async () => {
     const [p, r] = await Promise.all([
@@ -94,6 +95,34 @@ export function Admin({ profile, onBack }: { profile: Profile; onBack: () => voi
           ))}
         </div>
         <p className="hint">{tr('⭐ = פרימיום (עוזר AI) · 🛡️ = מנהל · 🔑 = איפוס סיסמה', '⭐ = premium (AI coach) · 🛡️ = admin · 🔑 = reset password')}</p>
+
+        <h3 className="section-title">{tr('🧹 ניקוי שולחנות ישנים', '🧹 Clean up old tables')}</h3>
+        <div className="card-group">
+          <div className="hint">
+            {tr(
+              'סוגר שולחנות שלא היה בהם שום מהלך בזמן שבחרת (כל אחד יוצא עם מה שיש לו, ובכסף אמיתי נוצר קיזוז חובות), ומוחק לגמרי שולחנות אימון ישנים שכבר נסגרו.',
+              'Closes tables with no activity for the chosen time (everyone cashes out; real-money tables get a settle-up), and fully deletes old closed practice tables.',
+            )}
+          </div>
+          <div className="seg">
+            {[3, 12, 24].map((h) => (
+              <button key={h} className={cleanHours === h ? 'active' : ''} onClick={() => setCleanHours(h)}>
+                {tr(`${h} שעות`, `${h} hours`)}
+              </button>
+            ))}
+          </div>
+          <AsyncButton
+            className="btn primary block"
+            onClick={async () => {
+              if (!confirm(tr(`לסגור שולחנות שלא היו פעילים ${cleanHours} שעות ולמחוק שולחנות אימון ישנים?`, `Close tables inactive for ${cleanHours} hours and delete old practice tables?`))) return;
+              const r = await gameCall<{ ok: boolean; closed: number; deleted: number }>({ op: 'admin', action: 'cleanup', hours: cleanHours });
+              await load();
+              toast(tr(`נסגרו ${r.closed} שולחנות · נמחקו ${r.deleted} שולחנות אימון 🧹`, `Closed ${r.closed} tables · deleted ${r.deleted} practice tables 🧹`), 'win');
+            }}
+          >
+            {tr('🧹 ניקוי עכשיו', '🧹 Clean up now')}
+          </AsyncButton>
+        </div>
 
         <h3 className="section-title">
           {tr('🟢 שולחנות פתוחים', '🟢 Open tables')} ({rooms.length})

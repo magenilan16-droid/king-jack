@@ -314,6 +314,38 @@ Deno.serve(async (req) => {
         }
         case 'forceClose':
           return await mutate(String(body.roomId), (full) => act(full, full.pub.hostId, { type: 'close' }, now));
+        case 'cleanup': {
+          // שולחנות נטושים: לא היה בהם מהלך / יד / קנייה / שחקן מחובר X שעות
+          const hours = Math.min(168, Math.max(1, Number(body.hours) || 3));
+          const cutoff = new Date(Date.now() - hours * 3600 * 1000).toISOString();
+          const { data: open } = await admin.from('game_rooms').select('id, created_at').eq('status', 'open');
+          const ids = (open ?? []).map((r: { id: string }) => r.id);
+          const active = new Set<string>();
+          if (ids.length) {
+            const [h, l, p] = await Promise.all([
+              admin.from('game_hands').select('room_id').in('room_id', ids).gte('created_at', cutoff),
+              admin.from('game_ledger').select('room_id').in('room_id', ids).gte('created_at', cutoff),
+              admin.from('game_presence').select('room_id').in('room_id', ids).gte('seen_at', cutoff),
+            ]);
+            for (const r of [...(h.data ?? []), ...(l.data ?? []), ...(p.data ?? [])]) active.add((r as { room_id: string }).room_id);
+          }
+          const stale = (open ?? []).filter((r: { id: string; created_at: string }) => !active.has(r.id) && r.created_at < cutoff);
+          let closed = 0;
+          for (const r of stale) {
+            // סגירה מסודרת: כולם יוצאים עם מה שיש להם, ובכסף אמיתי נוצרים חובות
+            const res = await mutate(r.id, (full) => act(full, full.pub.hostId, { type: 'close' }, now));
+            if (res.status === 200) closed++;
+          }
+          // שולחנות אימון שנסגרו לפני יותר מיום - נמחקים לגמרי (לא נספרים בשום מקום)
+          const { data: del } = await admin
+            .from('game_rooms')
+            .delete()
+            .eq('status', 'closed')
+            .eq('money_mode', 'demo')
+            .lt('closed_at', new Date(Date.now() - 24 * 3600 * 1000).toISOString())
+            .select('id');
+          return json({ ok: true, closed, deleted: del?.length ?? 0 });
+        }
         case 'settleAll': {
           const { error } = await admin
             .from('game_debts')
