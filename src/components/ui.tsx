@@ -43,7 +43,7 @@ export function Toaster() {
     };
   }, []);
   return (
-    <div className="toaster">
+    <div className="toaster" role="status" aria-live="polite">
       {items.map((t) => (
         <div key={t.id} className={`toast ${t.kind}`}>
           {t.text}

@@ -115,7 +115,7 @@ export function Debts({ profile, onBack }: { profile: Profile; onBack: () => voi
   return (
     <div className="screen has-nav">
       <header className="topbar">
-        <button className="icon-btn" onClick={onBack}>
+        <button className="icon-btn" onClick={onBack} aria-label={lang === 'he' ? 'חזרה' : 'Back'}>
           {lang === 'he' ? '➜' : '⬅'}
         </button>
         <h1>{tr('💸 חובות', '💸 Debts')}</h1>

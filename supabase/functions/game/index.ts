@@ -47,7 +47,7 @@ async function pushTo(userIds: string[], make: (lang: Lang) => Record<string, un
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify(make(langOf.get(s.user_id) ?? 'he')),
+          JSON.stringify({ ...make(langOf.get(s.user_id) ?? 'he'), lang: langOf.get(s.user_id) ?? 'he' }),
           { TTL: 600, urgency: 'high' },
         );
         sent++;
@@ -95,14 +95,19 @@ async function createDebts(roomId: string) {
   if (Math.abs(kitty) > 0.005) balances.push({ id: 'kupa', name: 'kupa', net: kitty });
   const transfers = settle(balances);
   if (!transfers.length) return;
-  await admin.from('game_debts').insert(
-    transfers.map((t) => ({
-      room_id: roomId,
-      from_user: t.from === 'kupa' ? null : t.from,
-      to_user: t.to === 'kupa' ? null : t.to,
-      amount: t.amount,
-    })),
-  );
+  const debtRows = transfers.map((t) => ({
+    room_id: roomId,
+    from_user: t.from === 'kupa' ? null : t.from,
+    to_user: t.to === 'kupa' ? null : t.to,
+    amount: t.amount,
+  }));
+  // החובות נכתבים אחרי שהשולחן כבר נסגר - אם נכשל, מנסים שוב ומתעדים בלוג
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { error } = await admin.from('game_debts').insert(debtRows);
+    if (!error) return;
+    console.error('debts insert failed', roomId, attempt, error.message);
+    await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+  }
 }
 
 const cors = {
@@ -250,6 +255,15 @@ Deno.serve(async (req) => {
         .filter((id) => id !== userId && !seated.includes(id))
         .slice(0, 30);
       if (!ids.length) return json({ error: 'לא נבחרו חברים' }, 400);
+      const { data: lastInv } = await admin
+        .from('game_invites')
+        .select('created_at')
+        .eq('from_user', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (lastInv && Date.now() - new Date(lastInv.created_at).getTime() < 15000)
+        return json({ error: 'רגע, שלחתם הזמנה הרגע - נסו שוב בעוד כמה שניות' }, 429);
       const { data: valid } = await admin.from('game_profiles').select('id').in('id', ids);
       const to = (valid ?? []).map((p: { id: string }) => p.id);
       if (to.length) {
@@ -292,6 +306,34 @@ Deno.serve(async (req) => {
         })),
       );
       return json({ ok: true });
+    }
+
+    // התראת בדיקה לעצמי - כדי לוודא שההתראות עובדות בטלפון
+    if (body.op === 'testPush') {
+      const sent = await pushTo([userId], (lang) => ({
+        title: lang === 'he' ? '👑 King Jack - בדיקה' : '👑 King Jack - test',
+        body: lang === 'he' ? 'ההתראות עובדות! 🎉' : 'Notifications are working! 🎉',
+        url: './',
+        tag: 'test',
+      }));
+      return json({ ok: true, sent });
+    }
+
+    // מחיקת שולחן מהלובי: אימון - נמחק לגמרי, כסף אמיתי - נסגר עם קיזוז (החובות נשמרים)
+    if (body.op === 'removeRoom') {
+      const { data: room } = await admin.from('game_rooms').select('id, status, money_mode, host_id, state').eq('id', body.roomId).single();
+      if (!room) return json({ error: 'השולחן לא נמצא' }, 404);
+      const isHost = room.host_id === userId || room.state?.hostId === userId;
+      if (!isHost && !profile.is_admin) return json({ error: 'רק מי שפתח את השולחן או מנהל' }, 403);
+      if (room.status === 'open') {
+        const res = await mutate(room.id, (full) => act(full, full.pub.hostId, { type: 'close' }, now));
+        if (res.status !== 200) return res;
+      }
+      if (room.money_mode === 'demo') {
+        await admin.from('game_rooms').delete().eq('id', room.id);
+        return json({ ok: true, deleted: true });
+      }
+      return json({ ok: true, closed: true });
     }
 
     // פעולות מנהל

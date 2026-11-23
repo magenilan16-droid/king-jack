@@ -1,31 +1,65 @@
+// שולחן בלאק ג׳ק - חצי עיגול: הדילר על הצד הישר למעלה, השחקנים על הקשת ואני למטה במרכז
 import { useEffect, useRef, useState } from 'react';
-import { type BJState, type BJPlayer, type BJHand, handValue, canDouble, canSplit } from '../engine/blackjack';
-import { Hand } from '../components/Card';
-import { Timer } from '../components/Timer';
+import { Check, RotateCcw } from 'lucide-react';
+import { type BJState, type BJPlayer, type BJHand, handValue, canDouble, canSplit, isNatural, betWindowMs } from '../engine/blackjack';
+import type { Card as C } from '../engine/cards';
+import { Card } from '../components/Card';
+import { Avatar } from '../components/Avatar';
+import { ChipStack } from '../components/Chips';
+import { TurnBar, TurnRing } from '../components/TurnBar';
 import { BlackjackTip } from '../components/Tips';
 import { Coach } from '../components/Coach';
 import { AsyncButton } from '../components/ui';
 import type { Theme } from '../lib/themes';
 import { pick } from '../lib/themes';
-import { fmt } from '../lib/balances';
+import { fmt, signed } from '../lib/balances';
 import { useI18n, type Lang } from '../lib/i18n';
 import { displayName } from '../lib/display';
 import { sfx } from '../lib/sound';
 import { vibrate } from '../lib/prefs';
-import { MAX_STRIKES } from '../engine/common';
+import { MAX_STRIKES, turnMs } from '../engine/common';
 
 type Act = (move: Record<string, unknown>) => Promise<void>;
+type Size = 'xs' | 'sm' | 'md' | 'lg';
 
 function resultLabel(r: string, lang: Lang): string {
-  const he: Record<string, string> = { blackjack: 'בלאק ג׳ק! 🎉', win: 'ניצחון ✅', push: 'תיקו 🤝', lose: 'הפסד', bust: 'נשרף 💥' };
-  const en: Record<string, string> = { blackjack: 'Blackjack! 🎉', win: 'Win ✅', push: 'Push 🤝', lose: 'Lose', bust: 'Bust 💥' };
+  const he: Record<string, string> = { blackjack: 'בלאק ג׳ק', win: 'ניצחון', push: 'תיקו', lose: 'הפסד', bust: 'נשרף' };
+  const en: Record<string, string> = { blackjack: 'Blackjack', win: 'Win', push: 'Push', lose: 'Lose', bust: 'Bust' };
   return (lang === 'he' ? he : en)[r] ?? r;
 }
 
-function handTotal(h: BJHand) {
-  const v = handValue(h.cards);
+function handTotal(cards: C[]) {
+  const v = handValue(cards);
   return v.soft && v.total < 21 ? `${v.total - 10}/${v.total}` : String(v.total);
 }
+
+// מיקומי מושבים על הקשת: צד שמאל (-1) או ימין (1). j=0 הכי קרוב אליי
+function arcSpots(count: number, side: 1 | -1) {
+  return Array.from({ length: count }, (_, j) => {
+    const t = count === 1 ? 0.45 : j / (count - 1);
+    const rad = ((46 + 38 * t) * Math.PI) / 180;
+    return { x: 50 + side * 39 * Math.sin(rad), y: 25 + 44 * Math.cos(rad) };
+  });
+}
+
+// עד 3 שחקנים בכל צד: עמודה לאורך הדופן, הקלפים מעל השחקן - כדי שלא ייכנסו למרכז
+function columnSpots(count: number, side: 1 | -1) {
+  return Array.from({ length: count }, (_, j) => {
+    const t = count === 1 ? 0.5 : j / (count - 1);
+    return { x: 50 + side * 37, y: 76 - 52 * t };
+  });
+}
+
+// ערכי הז׳טונים במגש לפי ההימור המינימלי
+function trayValues(min: number, max: number) {
+  const out: number[] = [];
+  for (const m of [1, 5, 10, 25, 100]) {
+    const v = min * m;
+    if (v <= max && !out.includes(v)) out.push(v);
+  }
+  return out.length ? out : [min];
+}
+const short = (v: number) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}K` : String(v));
 
 export function BlackjackView({
   s,
@@ -53,10 +87,9 @@ export function BlackjackView({
   const isHost = s.hostId === myId;
   const banker = s.players.find((p) => p.id === s.bankerId);
   const amBanker = s.bankerId === myId;
-  const turnPlayer = s.turn ? s.players[s.turn.p] : null;
-  const myTurn = s.phase === 'playing' && turnPlayer?.id === myId;
-  const others = s.players.filter((p) => p.id !== myId);
-  const dealerTotal = !s.dealer.hidden && s.dealer.cards.length ? handValue(s.dealer.cards).total : null;
+  const turnPlayer = s.phase === 'playing' && s.turn ? s.players[s.turn.p] : null;
+  const myTurn = !!turnPlayer && turnPlayer.id === myId;
+  const total = turnMs(s.settings);
   const [bet, setBet] = useState(me?.bet ?? s.settings.minBet);
   const [resultQuip, setResultQuip] = useState('');
 
@@ -71,7 +104,7 @@ export function BlackjackView({
     if (s.phase !== 'results' || !me?.hands.length) return;
     setResultQuip(myNet > 0 ? pick(theme.win) : myNet < 0 ? pick(theme.lose) : '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.phase, s.round]);
+  }, [s.phase, s.round, lang]);
 
   // צלילים לפי מה שהשתנה בשולחן
   const prev = useRef<BJState | null>(null);
@@ -80,7 +113,8 @@ export function BlackjackView({
     prev.current = s;
     if (!p) return;
     const count = (x: BJState) => x.dealer.cards.length + x.players.reduce((a, pl) => a + pl.hands.reduce((b, h) => b + h.cards.length, 0), 0);
-    if (count(s) > count(p)) sfx.card();
+    if (s.round !== p.round && s.phase === 'playing') sfx.shuffle();
+    else if (count(s) > count(p)) sfx.card();
     const readyNow = s.players.filter((x) => x.ready).length;
     if (s.phase === 'betting' && readyNow > p.players.filter((x) => x.ready).length) sfx.chips();
     if (s.phase === 'results' && p.phase !== 'results') {
@@ -98,11 +132,11 @@ export function BlackjackView({
 
   // המארח מעביר אוטומטית לסיבוב הבא
   useEffect(() => {
-    if (!isHost || s.phase !== 'results') return;
-    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), 7000);
+    if (!me || s.phase !== 'results') return;
+    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), isHost ? 7000 : 10000 + Math.random() * 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHost, s.phase, s.round]);
+  }, [isHost, !!me, s.phase, s.round]);
 
   const min = s.settings.minBet;
   const maxBet = Math.min(s.settings.maxBet, Math.floor(me?.chips ?? 0));
@@ -110,173 +144,250 @@ export function BlackjackView({
   const humanBettors = s.players.filter((p) => p.id !== s.bankerId && !p.isBot).length;
   const curHand = me && s.turn && myTurn ? me.hands[s.turn.h] : null;
 
+  // סידור המושבים: מי שאחריי בתור הולך שמאלה, מי שלפניי - ימינה (כמו בשולחן אמיתי)
+  const myIdx = s.players.findIndex((p) => p.id === myId);
+  const circle = myIdx >= 0 ? s.players.slice(myIdx + 1).concat(s.players.slice(0, myIdx)) : s.players;
+  const leftN = Math.ceil(circle.length / 2);
+  const dense = circle.length > 6;
+  const spotsFor = dense ? arcSpots : columnSpots;
+  const leftSpots = spotsFor(leftN, -1);
+  const rightSpots = spotsFor(circle.length - leftN, 1);
+  const seats = circle.map((p, i) =>
+    i < leftN
+      ? { p, pos: leftSpots[i], side: 'l' as const }
+      : { p, pos: rightSpots[circle.length - 1 - i], side: 'r' as const },
+  );
+
+  const dealerUp = s.dealer.cards;
+  const dealerTotal = !s.dealer.hidden && dealerUp.length ? handValue(dealerUp).total : null;
+  const myHands = me?.hands ?? [];
+  const mySize: Size = myHands.length > 2 ? 'sm' : myHands.length > 1 ? 'md' : 'lg';
+  const spotAmount =
+    s.phase === 'betting' ? (me?.ready && bet === me.bet ? me.bet : bet) : myHands.reduce((a, h) => a + h.bet, 0);
+  const tray = trayValues(min, Math.max(min, s.settings.maxBet));
+
   return (
-    <div className="bj">
-      <div className="dealer-area">
-        <svg className="felt-print" viewBox="0 0 320 64" aria-hidden="true">
-          <path id="arc" d="M 30 58 Q 160 0 290 58" fill="none" />
-          <text>
-            <textPath href="#arc" startOffset="50%" textAnchor="middle">
-              BLACKJACK PAYS 3 TO 2
-            </textPath>
-          </text>
-          <text x="160" y="62" textAnchor="middle" className="sub-print">
-            DEALER STANDS ON 17
-          </text>
-        </svg>
-        <div className="dealer-label">
-          {banker
-            ? `🏦 ${tr('הבנק', 'Bank')}: ${banker.avatar} ${banker.name} (${fmt(banker.chips)})`
-            : `🎩 ${theme.labels.dealer}`}
-        </div>
-        {s.dealer.cards.length > 0 ? (
-          <Hand cards={s.dealer.cards} hiddenCount={s.dealer.hidden ? 1 : 0} size="md" />
-        ) : (
-          <div className="dealer-empty">{s.phase === 'betting' ? tr('מחכים להימורים...', 'Waiting for bets...') : ''}</div>
-        )}
-        {dealerTotal != null && (
-          <div className={`total-badge ${dealerTotal > 21 ? 'bust' : ''}`}>{dealerTotal > 21 ? `${dealerTotal} 💥` : dealerTotal}</div>
-        )}
-      </div>
-
-      <div className="seats">
-        {others.map((p) => (
-          <Seat key={p.id} p={p} s={s} isTurn={turnPlayer?.id === p.id} lang={lang} onTap={() => onSeatTap(p.id)} />
-        ))}
-      </div>
-
-      {me && (
-        <div data-pid={myId} className={`me-area ${myTurn ? 'my-turn' : ''}`}>
-          {me.hands.length > 0 ? (
-            <div className="my-hands">
-              {me.hands.map((h, i) => (
-                <div key={i} className={`my-hand ${myTurn && s.turn?.h === i ? 'active' : ''}`}>
-                  <Hand cards={h.cards} size="lg" stagger />
-                  <div className="hand-meta">
-                    <span className="total-badge">{handTotal(h)}</span>
-                    <span className="bet-badge">🪙 {fmt(h.bet)}</span>
-                    {h.result && <span className={`result ${h.result}`}>{resultLabel(h.result, lang)}</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="me-idle">
-              {amBanker
-                ? tr('🏦 אתה הבנק - כל ההימורים מולך', '🏦 You are the bank - all bets are against you')
-                : s.phase === 'betting'
-                  ? me.ready
-                    ? tr(`✔ הימרת ${fmt(me.bet)}`, `✔ You bet ${fmt(me.bet)}`)
-                    : tr('שימו הימור לסיבוב', 'Place your bet')
-                  : tr('מחכה לסיבוב הבא', 'Waiting for the next round')}
-            </div>
-          )}
-          <div className="my-chips">
-            {me.avatar} {me.name} · <b>{fmt(me.chips)}</b> {theme.labels.chips}
+    <div className="pk bk">
+      <div className="pk-stage bk-stage">
+        <div className="bk-table">
+          <div className="bk-felt">
+            <svg className="bk-print" viewBox="0 0 300 70" aria-hidden="true">
+              <path id="bk-arc" d="M 22 18 Q 150 78 278 18" fill="none" />
+              <text className="bk-print-main">
+                <textPath href="#bk-arc" startOffset="50%" textAnchor="middle">
+                  BLACKJACK PAYS 3 TO 2
+                </textPath>
+              </text>
+              <text x="150" y="66" textAnchor="middle" className="bk-print-sub">
+                DEALER MUST STAND ON 17
+              </text>
+            </svg>
           </div>
-          {s.phase === 'results' && me.hands.length > 0 && (
-            <div className={`round-result ${myNet > 0 ? 'pos' : myNet < 0 ? 'neg' : ''}`}>
-              {myNet > 0 ? '+' : ''}
-              {fmt(myNet)} {resultQuip && `· ${resultQuip}`}
-            </div>
-          )}
         </div>
-      )}
+        <div className="bk-rack" aria-hidden="true">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <span key={i} className={`bk-tube t${i % 4}`} />
+          ))}
+        </div>
 
-      {tipsOn && me && curHand && (
-        <BlackjackTip
-          cards={curHand.cards}
-          dealerUp={s.dealer.cards[0]}
-          canDouble={canDouble(me, curHand)}
-          canSplit={canSplit(me, curHand)}
-          theme={theme}
-        />
-      )}
+        {/* הדילר */}
+        <div className="bk-dealer">
+          <div className="bk-dealer-id">
+            {banker && <Avatar name={banker.name} emoji={banker.avatar} bot={banker.isBot} size={26} />}
+            <span dir="auto">{banker ? `${tr('הבנק', 'Bank')}: ${displayName(banker, lang)}` : theme.labels.dealer}</span>
+            {banker && <b>{fmt(banker.chips)}</b>}
+          </div>
+          <div className="bk-dealer-hand">
+            {dealerUp.length > 0 ? (
+              <div className="bk-cards">
+                {dealerUp.map((c, i) => (
+                  <Card key={i + c} card={c} size="md" delay={i < 2 ? i * 120 : 0} />
+                ))}
+                {s.dealer.hidden && <Card card={null} size="md" />}
+              </div>
+            ) : (
+              <div className="bk-cards">
+                <span className="pk-slot" />
+                <span className="pk-slot" />
+              </div>
+            )}
+            {dealerTotal != null && <span className={`bk-total ${dealerTotal > 21 ? 'bust' : ''}`}>{dealerTotal}</span>}
+          </div>
+        </div>
 
-      <div className="action-bar">
+        {/* שאר השחקנים */}
+        {seats.map(({ p, pos, side }) => (
+          <Seat
+            key={p.id}
+            p={p}
+            s={s}
+            pos={pos}
+            side={side}
+            dense={dense}
+            isTurn={turnPlayer?.id === p.id}
+            total={total}
+            lang={lang}
+            onTap={() => onSeatTap(p.id)}
+          />
+        ))}
+
+        {/* תוצאת הסיבוב שלי */}
+        {s.phase === 'results' && myHands.length > 0 && (
+          <div className={`bk-net ${myNet > 0 ? 'pos' : myNet < 0 ? 'neg' : 'even'}`} key={s.round}>
+            <b>
+              {myNet > 0 ? '+' : myNet < 0 ? '−' : ''}
+              {fmt(Math.abs(myNet))}
+            </b>
+            {resultQuip && <span>{resultQuip}</span>}
+          </div>
+        )}
+
+        {/* אני */}
+        {me && (
+          <div className={`bk-me ${myTurn ? 'turn' : ''}`} data-pid={myId}>
+            {myHands.length > 0 && (
+              <div className="bk-myhands">
+                {myHands.map((h, i) => (
+                  <HandView key={i} h={h} size={mySize} active={myTurn && s.turn?.h === i && myHands.length > 1} lang={lang} />
+                ))}
+              </div>
+            )}
+            {!amBanker && (
+              <div className={`bk-circle ${spotAmount > 0 ? 'has' : ''} ${s.phase === 'betting' && !me.ready ? 'pending' : ''}`}>
+                {spotAmount > 0 ? (
+                  <>
+                    <ChipStack amount={spotAmount} unit={min} size={22} label={false} />
+                    <b>{fmt(spotAmount)}</b>
+                  </>
+                ) : (
+                  <span>{tr('הימור', 'Bet')}</span>
+                )}
+              </div>
+            )}
+            <div className="bk-meplate">
+              <span className="pk-av">
+                {myTurn && s.turnDeadline && <TurnRing deadline={s.turnDeadline} total={total} />}
+                <Avatar name={me.name} emoji={me.avatar} size={34} />
+              </span>
+              <span className="bk-meplate-txt">
+                <span>{amBanker ? tr('אתם הבנק', "You're the bank") : tr('אני', 'Me')}</span>
+                <b>{fmt(me.chips)}</b>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* אזור הפעולה */}
+      <div className="pk-actions">
         {s.phase === 'betting' && me && !amBanker && (
           <>
             {(me.strikes ?? 0) >= MAX_STRIKES && (
-              <div className="strike-warn">{tr('⚠️ פספסת כמה תורות - שימו הימור כדי לחזור למשחק', '⚠️ You missed some turns - place a bet to get back in')}</div>
+              <div className="pk-note warn">{tr('פספסת כמה תורות - שימו הימור כדי לחזור למשחק', 'You missed some turns - place a bet to get back in')}</div>
             )}
             {me.chips < min ? (
-              <button className="btn primary block" onClick={onRebuy}>
-                {tr(`נגמרו ה${theme.labels.chips} - קנייה נוספת 💰`, `Out of ${theme.labels.chips} - buy more 💰`)}
+              <button className="pk-btn gold block" onClick={onRebuy}>
+                {tr('קנייה חוזרת', 'Rebuy')} <small>{fmt(s.settings.buyIn)}</small>
               </button>
             ) : (
               <>
-                <div className="bet-chips">
-                  {[min, min * 5, min * 10].map((v) => (
-                    <button key={v} className="chip" onClick={() => setBet((b) => Math.min(maxBet, b + v))}>
-                      +{fmt(v)}
+                <div className="bk-tray" role="group" aria-label={tr('ז׳טונים', 'Chips')}>
+                  {tray.map((v, i) => (
+                    <button
+                      key={v}
+                      className={`bk-chip c${i}`}
+                      onClick={() => {
+                        setBet((b) => Math.min(maxBet, b + v));
+                        sfx.chips(1);
+                      }}
+                      disabled={bet + v > maxBet}
+                      aria-label={`+${fmt(v)}`}
+                    >
+                      <span>{short(v)}</span>
                     </button>
                   ))}
-                  <button className="chip ghost" onClick={() => setBet(Math.min(maxBet, bet * 2))}>
-                    x2
-                  </button>
-                  <button className="chip ghost" onClick={() => setBet(min)}>
-                    ↺
-                  </button>
                 </div>
-                <AsyncButton
-                  className="btn primary block big"
-                  onClick={() => act({ type: 'bet', amount: bet })}
-                  disabled={bet < min || bet > maxBet}
-                >
-                  {me.ready ? tr(`עדכון הימור ל-${fmt(bet)}`, `Change bet to ${fmt(bet)}`) : tr(`הימור ${fmt(bet)} 🪙`, `Bet ${fmt(bet)} 🪙`)}
-                </AsyncButton>
+                <div className="pk-btnrow bk-betrow">
+                  <button className="pk-btn ghost sq" onClick={() => setBet(0)} aria-label={tr('ניקוי', 'Clear')}>
+                    <RotateCcw size={20} />
+                  </button>
+                  <button className="pk-btn ghost sq" onClick={() => setBet((b) => Math.min(maxBet, Math.max(min, b * 2)))}>
+                    ×2
+                  </button>
+                  {me.ready && bet === me.bet ? (
+                    <button className="pk-btn call" disabled>
+                      <span className="bk-placed">
+                        <Check size={18} /> {tr('ההימור נקלט', 'Bet placed')}
+                      </span>
+                    </button>
+                  ) : (
+                    <AsyncButton className="pk-btn gold" onClick={() => act({ type: 'bet', amount: bet })} disabled={bet < min || bet > maxBet}>
+                      {bet < min ? (
+                        tr(`מינימום ${fmt(min)}`, `Minimum ${fmt(min)}`)
+                      ) : (
+                        <>
+                          <span>{me.ready ? tr('עדכון הימור', 'Update bet') : tr('הימור', 'Bet')}</span>
+                          <small>{fmt(bet)}</small>
+                        </>
+                      )}
+                    </AsyncButton>
+                  )}
+                </div>
               </>
             )}
           </>
         )}
+        {s.phase === 'betting' && amBanker && <div className="pk-note">{tr('אתם הבנק - כל ההימורים מולכם', "You're the bank - every bet is against you")}</div>}
+        {s.phase === 'betting' && (me?.ready || amBanker || !me) && (
+          <div className="pk-note">
+            {tr('מוכנים', 'Ready')} {readyCount}/{humanBettors}
+          </div>
+        )}
+        {s.phase === 'betting' && s.betDeadline && (
+          <div className="pk-waitrow">
+            <span>{tr('מחלקים בעוד', 'Dealing in')}</span>
+            <TurnBar deadline={s.betDeadline} total={betWindowMs(s)} roomId={roomId} expireMove="deal" />
+          </div>
+        )}
         {s.phase === 'betting' && isHost && (
-          <AsyncButton className="btn ghost block" onClick={() => act({ type: 'deal' })}>
-            {tr(`▶ חלק עכשיו (${readyCount}/${humanBettors} מוכנים)`, `▶ Deal now (${readyCount}/${humanBettors} ready)`)}
+          <AsyncButton className="pk-btn ghost block" onClick={() => act({ type: 'deal' })}>
+            {tr('לחלק עכשיו', 'Deal now')}
           </AsyncButton>
         )}
-        {s.phase === 'betting' && !isHost && (me?.ready || amBanker) && (
-          <div className="waiting">{tr(`מחכים לשאר השחקנים... (${readyCount}/${humanBettors})`, `Waiting for others... (${readyCount}/${humanBettors})`)}</div>
+
+        {s.phase === 'playing' && !myTurn && turnPlayer && (
+          <div className="pk-waitrow">
+            <span>
+              {tr('תור של', 'Waiting for')} <b dir="auto">{displayName(turnPlayer, lang)}</b>
+            </span>
+            <TurnBar deadline={s.turnDeadline} total={total} roomId={roomId} />
+          </div>
+        )}
+        {myTurn && me && curHand && (
+          <>
+            <TurnBar deadline={s.turnDeadline} total={total} roomId={roomId} mine />
+            <div className="pk-hintrow">
+              {tipsOn && s.dealer.cards[0] ? (
+                <BlackjackTip
+                  cards={curHand.cards}
+                  dealerUp={s.dealer.cards[0]}
+                  canDouble={canDouble(me, curHand)}
+                  canSplit={canSplit(me, curHand)}
+                  theme={theme}
+                  compact
+                />
+              ) : (
+                <span />
+              )}
+              <Coach roomId={roomId} premium={premium} contextKey={`${s.round}-${s.turn?.h}-${curHand.cards.length}`} compact />
+            </div>
+            <ActionButtons me={me} hand={curHand} theme={theme} act={act} />
+          </>
         )}
 
-        {s.phase === 'playing' &&
-          (myTurn && me && curHand ? (
-            <>
-              <Coach roomId={roomId} premium={premium} contextKey={`${s.round}-${s.turn?.h}-${curHand.cards.length}`} />
-              <div className="turn-row">
-                <span>{tr('התור שלך!', 'Your turn!')}</span>
-                <Timer deadline={s.turnDeadline} roomId={roomId} mine />
-              </div>
-              <div className="btn-grid">
-                <AsyncButton className="btn act hit" onClick={() => act({ type: 'hit' })}>
-                  {theme.labels.hit}
-                </AsyncButton>
-                <AsyncButton className="btn act stand" onClick={() => act({ type: 'stand' })}>
-                  {theme.labels.stand}
-                </AsyncButton>
-                {canDouble(me, curHand) && (
-                  <AsyncButton className="btn act double" onClick={() => act({ type: 'double' })}>
-                    {theme.labels.double}
-                  </AsyncButton>
-                )}
-                {canSplit(me, curHand) && (
-                  <AsyncButton className="btn act split" onClick={() => act({ type: 'split' })}>
-                    {theme.labels.split}
-                  </AsyncButton>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="turn-row">
-              <span>
-                {tr('תור של', 'Turn:')} {turnPlayer?.avatar} {turnPlayer && displayName(turnPlayer, lang)}
-              </span>
-              <Timer deadline={s.turnDeadline} roomId={roomId} />
-            </div>
-          ))}
-
         {s.phase === 'results' && me && (
-          <AsyncButton className="btn primary block" onClick={() => act({ type: 'next' })}>
-            {tr('סיבוב הבא ▶', 'Next round ▶')}
+          <AsyncButton className="pk-btn gold block" onClick={() => act({ type: 'next' })}>
+            {tr('סיבוב הבא', 'Next round')}
           </AsyncButton>
         )}
       </div>
@@ -284,27 +395,125 @@ export function BlackjackView({
   );
 }
 
-function Seat({ p, s, isTurn, lang, onTap }: { p: BJPlayer; s: BJState; isTurn: boolean; lang: Lang; onTap: () => void }) {
-  const isBanker = s.bankerId === p.id;
+function ActionButtons({ me, hand, theme, act }: { me: BJPlayer; hand: BJHand; theme: Theme; act: Act }) {
+  const dbl = canDouble(me, hand);
+  const spl = canSplit(me, hand);
+  const cols = 2 + (dbl ? 1 : 0) + (spl ? 1 : 0);
   return (
-    <div className={`seat ${isTurn ? 'turn' : ''} ${p.leaving ? 'dim' : ''}`} data-pid={p.id} onClick={onTap} role="button">
-      <div className="seat-head">
-        <span className="avatar">{p.avatar}</span>
-        <span className="seat-name" dir="auto">{displayName(p, lang)}</span>
-        {isBanker && <span className="tag">🏦</span>}
+    <div className="pk-btnrow" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+      <AsyncButton className="pk-btn call" onClick={() => act({ type: 'hit' })}>
+        {theme.labels.hit}
+      </AsyncButton>
+      <AsyncButton className="pk-btn fold" onClick={() => act({ type: 'stand' })}>
+        {theme.labels.stand}
+      </AsyncButton>
+      {dbl && (
+        <AsyncButton className="pk-btn gold" onClick={() => act({ type: 'double' })}>
+          <span>{theme.labels.double}</span>
+          <small>{signed(hand.bet)}</small>
+        </AsyncButton>
+      )}
+      {spl && (
+        <AsyncButton className="pk-btn ghost" onClick={() => act({ type: 'split' })}>
+          <span>{theme.labels.split}</span>
+          <small>{signed(hand.bet)}</small>
+        </AsyncButton>
+      )}
+    </div>
+  );
+}
+
+// יד אחת: קלפים, סכום ותוצאה
+function HandView({ h, size, active, lang }: { h: BJHand; size: Size; active: boolean; lang: Lang }) {
+  const v = handValue(h.cards);
+  const natural = isNatural(h);
+  return (
+    <div className={`bk-hand ${active ? 'active' : ''} ${h.result ? 'r-' + h.result : ''}`}>
+      <div className={`bk-cards ${size}`}>
+        {h.cards.map((c, i) => (
+          <Card key={i + c} card={c} size={size} delay={i < 2 ? i * 120 : 0} />
+        ))}
       </div>
-      <div className="seat-chips">{fmt(p.chips)}</div>
-      {p.hands.length > 0 ? (
-        p.hands.map((h, i) => (
-          <div key={i} className="seat-hand">
-            <Hand cards={h.cards} size="sm" />
-            <span className="mini-total">{handTotal(h)}</span>
-            {h.result && <span className={`result mini ${h.result}`}>{resultLabel(h.result, lang)}</span>}
-          </div>
-        ))
-      ) : s.phase === 'betting' && !isBanker ? (
-        <div className="seat-status">{p.isBot ? '🤖' : p.ready ? `✔ ${fmt(p.bet)}` : lang === 'he' ? '⏳ בוחר/ת' : '⏳ choosing'}</div>
-      ) : null}
+      <div className="bk-hmeta">
+        <span className={`bk-total ${v.total > 21 ? 'bust' : natural ? 'bj' : ''}`}>{natural ? '21' : handTotal(h.cards)}</span>
+        {h.result && <span className={`bk-res ${h.result}`}>{resultLabel(h.result, lang)}</span>}
+      </div>
+    </div>
+  );
+}
+
+// מושב של שחקן אחר על הקשת
+function Seat({
+  p,
+  s,
+  pos,
+  side,
+  dense,
+  isTurn,
+  total,
+  lang,
+  onTap,
+}: {
+  p: BJPlayer;
+  s: BJState;
+  pos: { x: number; y: number };
+  side: 'l' | 'r';
+  dense: boolean;
+  isTurn: boolean;
+  total: number;
+  lang: Lang;
+  onTap: () => void;
+}) {
+  const isBanker = s.bankerId === p.id;
+  const out = p.leaving || (s.phase !== 'betting' && !p.hands.length && !isBanker);
+  return (
+    <div
+      className={`bk-seat ${side} ${dense ? 'dense' : 'col'} ${isTurn ? 'turn' : ''} ${out ? 'out' : ''}`}
+      style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+      data-pid={p.id}
+      onClick={onTap}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onTap()}
+      role="button"
+      tabIndex={0}
+      aria-label={displayName(p, lang)}
+    >
+      <span className="bk-who">
+        <span className="pk-av">
+          {isTurn && s.turnDeadline && <TurnRing deadline={s.turnDeadline} total={total} />}
+          <Avatar name={p.name} emoji={p.avatar} bot={p.isBot} size={dense ? 32 : 38} />
+        </span>
+        <span className="pk-plate">
+          <span className="pk-name" dir="auto">
+            {displayName(p, lang)}
+          </span>
+          <span className="pk-stack">{isBanker ? (lang === 'he' ? 'בנק' : 'Bank') : fmt(p.chips)}</span>
+        </span>
+      </span>
+      <span className="bk-spot">
+        {p.hands.length > 0
+          ? p.hands.map((h, i) => (
+              <span key={i} className={`bk-mini ${h.result ? 'r-' + h.result : ''}`}>
+                <span className="bk-cards sm">
+                  {h.cards.map((c, k) => (
+                    <Card key={k + c} card={c} size={dense ? 'xs' : 'sm'} />
+                  ))}
+                </span>
+                <span className="bk-hmeta">
+                  <span className={`bk-total ${handValue(h.cards).total > 21 ? 'bust' : ''}`}>{handTotal(h.cards)}</span>
+                  {h.result ? (
+                    <span className={`bk-res ${h.result}`}>{resultLabel(h.result, lang)}</span>
+                  ) : (
+                    <ChipStack amount={h.bet} unit={s.settings.minBet} size={12} />
+                  )}
+                </span>
+              </span>
+            ))
+          : s.phase === 'betting' && !isBanker
+            ? p.ready
+              ? <ChipStack amount={p.bet} unit={s.settings.minBet} size={14} />
+              : !p.isBot && <span className="bk-wait">{lang === 'he' ? 'בוחר הימור' : 'Choosing'}</span>
+            : null}
+      </span>
     </div>
   );
 }

@@ -96,7 +96,20 @@ function chatOf(f: Full): ChatMsg[] {
   return pub.chat;
 }
 
+// זמן מינימלי להצגת תוצאת יד/סיבוב לפני שאפשר לעבור הלאה
+export const RESULT_MIN_MS = 3000;
+
 export function act(f: Full, actorId: string, move: RoomMove, now: number): { effects: LedgerEffect[]; closed?: boolean } {
+  const pub = f.pub as Full['pub'] & { endedAt?: number };
+  const before = pub.phase;
+  if (move.type === 'next' && now - (pub.endedAt ?? 0) < RESULT_MIN_MS) fail('רגע - תנו לכולם לראות את התוצאה');
+  const res = actInner(f, actorId, move, now);
+  const after = f.pub.phase;
+  if (after !== before && (after === 'showdown' || after === 'results')) (f.pub as typeof pub).endedAt = now;
+  return res;
+}
+
+function actInner(f: Full, actorId: string, move: RoomMove, now: number): { effects: LedgerEffect[]; closed?: boolean } {
   const pub = f.pub;
   const me = pub.players.find((p) => p.id === actorId);
   switch (move.type) {
@@ -121,6 +134,8 @@ export function act(f: Full, actorId: string, move: RoomMove, now: number): { ef
       const text = String(move.text || '').trim().slice(0, 120);
       if (!text) fail('הודעה ריקה');
       const chat = chatOf(f);
+      const last = [...chat].reverse().find((c) => c.id === actorId);
+      if (last && now - last.at < 1200) fail('לאט לאט 🙂');
       chat.push({ id: actorId, name: me.name, text, at: now });
       if (chat.length > 40) chat.splice(0, chat.length - 40);
       return { effects: [] };
@@ -164,7 +179,7 @@ export function act(f: Full, actorId: string, move: RoomMove, now: number): { ef
       return { effects, closed: true };
     }
     default:
-      if (!me && move.type !== 'timeout' && move.type !== 'next') fail('אתה לא בשולחן');
+      if (!me && move.type !== 'timeout' && move.type !== 'deal') fail('אתה לא בשולחן');
       return {
         effects:
           pub.kind === 'blackjack'

@@ -72,6 +72,13 @@ export function computeLines(
   return { lines, kupa, transfers: settle(balances) };
 }
 
+// סכום עם סימן (+120 / -50) שנשאר בצד הנכון גם בעברית
+export function signed(n: number, unit = ''): string {
+  const r = Math.round(n * 100) / 100;
+  const sign = r > 0 ? '+' : r < 0 ? '-' : '';
+  return `‎${sign}${unit}${fmt(Math.abs(r))}`;
+}
+
 export function fmt(n: number): string {
   const r = Math.round(n * 100) / 100;
   return r.toLocaleString(getLang() === 'he' ? 'he-IL' : 'en-US', { maximumFractionDigits: 2 });

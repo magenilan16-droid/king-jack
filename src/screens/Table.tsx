@@ -176,7 +176,11 @@ export function Table({
           <h1 dir="auto">{room.name}</h1>
           <span className="code-chip">
             <span className={`mode-dot ${moneyMode}`} />
-            {moneyMode === 'demo' ? tr('אימון', 'Practice') : tr('כסף אמיתי', 'Real money')} · {room.code} · {tr('קנייה', 'Buy-in')} {fmt(buyIn)}
+            <span>{moneyMode === 'demo' ? tr('אימון', 'Practice') : tr('כסף אמיתי', 'Real money')}</span>
+            <span className="tt-code">{room.code}</span>
+            <span>
+              {tr('קנייה', 'Buy-in')} <b className="tt-num">{fmt(buyIn)}</b>
+            </span>
           </span>
         </div>
         <div className="top-actions">
@@ -408,7 +412,21 @@ export function Table({
             <AsyncButton
               className="menu-item danger"
               onClick={async () => {
-                if (!confirm(tr(`לקום מהשולחן עם ${fmt(me.chips)}?`, `Leave the table with ${fmt(me.chips)}?`))) return;
+                const live =
+                  hd && hd.phase !== 'waiting' && hd.phase !== 'showdown'
+                    ? hd.players.find((p) => p.id === myId)
+                    : bj && bj.phase === 'playing'
+                      ? bj.players.find((p) => p.id === myId && p.hands.length)
+                      : null;
+                const allIn = !!live && 'allIn' in live && live.allIn && !live.folded;
+                const msg = !live
+                  ? tr(`לקום מהשולחן עם ${fmt(me.chips)}?`, `Leave the table with ${fmt(me.chips)}?`)
+                  : allIn
+                    ? tr('אתם באול-אין: היד תסתיים כרגיל, ומה שתזכו בו יירשם לכם כשתקומו.', "You're all-in: the hand plays out and anything you win is cashed out when you leave.")
+                    : hd
+                      ? tr('יש יד פעילה - הקלפים שלכם יתקפלו ותקומו בסוף היד. להמשיך?', 'A hand is running - your cards are folded and you leave when it ends. Continue?')
+                      : tr('הסיבוב באמצע - ההימור נשאר ותקומו בסוף הסיבוב. להמשיך?', 'The round is running - your bet stays and you leave when it ends. Continue?');
+                if (!confirm(msg)) return;
                 await act({ type: 'leave' });
                 onExit();
               }}

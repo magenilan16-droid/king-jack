@@ -1,13 +1,13 @@
 // מסך פרופיל והגדרות
-import { useState } from 'react';
-import { Bell, Download, Lightbulb, LogOut, Shield, Volume2, Languages, Palette, Smile } from 'lucide-react';
+import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, Volume2, Languages, Palette, Smile } from 'lucide-react';
 import { supabase, type Profile as P } from '../lib/supabase';
 import { allThemes, AVATARS, type Theme, type ThemeId } from '../lib/themes';
-import { isIOS } from '../lib/platform';
-import { pushSupported, pushPermission, enablePush } from '../lib/push';
+import { isIOS, isStandalone } from '../lib/platform';
+import { usePushSetup, sendTestPush } from '../components/PushSetup';
+import { forgetPushOnThisDevice } from '../lib/push';
 import { useMuted } from '../lib/sound';
 import { useI18n } from '../lib/i18n';
-import { AsyncButton, toast } from '../components/ui';
+import { AsyncButton } from '../components/ui';
 
 export function ProfileScreen({
   profile,
@@ -29,7 +29,7 @@ export function ProfileScreen({
   onProfileChange: () => void;
 }) {
   const { tr, lang, setLang } = useI18n();
-  const [perm, setPerm] = useState(pushPermission());
+  const push = usePushSetup(onInstall);
   const [muted, setMuted] = useMuted();
 
   return (
@@ -105,30 +105,34 @@ export function ProfileScreen({
             </span>
             <input type="checkbox" checked={!muted} onChange={(e) => setMuted(!e.target.checked)} />
           </label>
-          {pushSupported() ? (
-            <AsyncButton
-              className="menu-item"
-              onClick={async () => {
-                await enablePush();
-                setPerm(pushPermission());
-                toast(tr('התראות פעילות 🔔', 'Notifications are on 🔔'), 'win');
-              }}
-            >
+          <AsyncButton
+            className="menu-item"
+            onClick={async () => {
+              if (push.perm === 'denied') push.openHelp('denied');
+              else await push.run();
+            }}
+          >
+            <span className="mi">
+              <Bell size={19} /> {tr('התראות', 'Notifications')}
+            </span>
+            <span className={`sub ${push.perm === 'granted' ? 'pos' : ''}`}>
+              {push.perm === 'granted'
+                ? tr('פעילות', 'On')
+                : push.perm === 'denied'
+                  ? tr('חסומות - איך משחררים', 'Blocked - how to fix')
+                  : isIOS && !isStandalone()
+                    ? tr('צריך להתקין קודם', 'Install first')
+                    : tr('לחצו להפעלה', 'Tap to turn on')}
+            </span>
+          </AsyncButton>
+          {push.perm === 'granted' && (
+            <AsyncButton className="menu-item" onClick={() => sendTestPush(tr)}>
               <span className="mi">
-                <Bell size={19} /> {tr('התראות', 'Notifications')}
-              </span>
-              <span className="sub">
-                {perm === 'granted' ? tr('פעילות ✔', 'on ✔') : perm === 'denied' ? tr('חסומות בהגדרות הטלפון', 'blocked in phone settings') : tr('לחצו להפעלה', 'tap to enable')}
+                <BellRing size={19} /> {tr('שליחת התראת בדיקה', 'Send a test notification')}
               </span>
             </AsyncButton>
-          ) : (
-            <div className="menu-item disabled">
-              <span className="mi">
-                <Bell size={19} /> {tr('התראות', 'Notifications')}
-              </span>
-              <span className="sub">{isIOS ? tr('צריך קודם להתקין למסך הבית', 'install to the home screen first') : tr('לא נתמך בדפדפן הזה', 'not supported here')}</span>
-            </div>
           )}
+          {push.sheet}
           <button className="menu-item" onClick={onInstall}>
             <span className="mi">
               <Download size={19} /> {tr('התקנה בטלפון', 'Install on your phone')}
@@ -141,7 +145,10 @@ export function ProfileScreen({
               </span>
             </button>
           )}
-          <button className="menu-item danger" onClick={() => supabase.auth.signOut()}>
+          <button className="menu-item danger" onClick={async () => {
+              await forgetPushOnThisDevice();
+              await supabase.auth.signOut();
+            }}>
             <span className="mi">
               <LogOut size={19} /> {tr('התנתקות', 'Log out')}
             </span>

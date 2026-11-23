@@ -14,16 +14,26 @@ export function BlackjackTip({
   canDouble,
   canSplit,
   theme,
+  compact = false,
 }: {
   cards: Card[];
   dealerUp: Card;
   canDouble: boolean;
   canSplit: boolean;
   theme: Theme;
+  compact?: boolean;
 }) {
   const { tr, lang } = useI18n();
   const mv = basicStrategy(cards, dealerUp, canDouble, canSplit);
   const moveTxt = lang === 'he' ? MOVE_HE[mv] : MOVE_EN[mv];
+  if (compact) {
+    return (
+      <div className="pk-hint" title={strategyExplain(cards, dealerUp, mv, lang)}>
+        <span className="pk-hint-l">{tr('לפי האסטרטגיה', 'Basic strategy')}</span>
+        <span className="verdict good">{moveTxt}</span>
+      </div>
+    );
+  }
   return (
     <div className="tip">
       <span className="tip-icon">💡</span>
@@ -45,12 +55,14 @@ export function HoldemTip({
   opponents,
   toCall,
   pot,
+  compact = false,
 }: {
   hole: Card[];
   board: Card[];
   opponents: number;
   toCall: number;
   pot: number;
+  compact?: boolean;
 }) {
   const { tr, lang } = useI18n();
   const [eq, setEq] = useState<number | null>(null);
@@ -96,6 +108,30 @@ export function HoldemTip({
       tone = 'bad';
     }
   }
+  if (compact) {
+    // שורה אחת מעל כפתורי הפעולה: סיכוי לנצח + המלצה קצרה
+    let short = '';
+    if (eq != null) {
+      const strong = Math.min(0.8, 1.5 / (opponents + 1));
+      if (toCall === 0) short = eq > strong ? tr('שווה להמר', 'Worth a bet') : tr('צ׳ק', 'Check');
+      else if (eq > Math.max(strong, potOdds + 0.15)) short = tr('שקלו העלאה', 'Consider a raise');
+      else if (eq >= potOdds) short = tr('קול משתלם', 'Call pays');
+      else if (eq >= potOdds - 0.05) short = tr('גבולי', 'Borderline');
+      else short = tr('עדיף לוותר', 'Better to fold');
+    }
+    return (
+      <div className="pk-hint" title={advice || undefined}>
+        <b>{eq == null ? '…' : Math.round(eq * 100) + '%'}</b>
+        <span className="pk-hint-l">{tr('סיכוי לנצח', 'to win')}</span>
+        {toCall > 0 && (
+          <span className="pk-hint-l">
+            {tr('צריך', 'need')} {Math.round(potOdds * 100)}%
+          </span>
+        )}
+        {short && <span className={`verdict ${tone}`}>{short}</span>}
+      </div>
+    );
+  }
   return (
     <div className={`tip ${tone}`}>
       <span className="tip-icon">💡</span>
@@ -107,7 +143,7 @@ export function HoldemTip({
             </span>
           )}
           <span>
-            {tr('סיכוי לנצח:', 'Win chance:')} <b>{eq == null ? '...' : Math.round(eq * 100) + '%'}</b>
+            {tr('סיכוי לנצח:', 'Win chance:')} <b>{eq == null ? '…' : Math.round(eq * 100) + '%'}</b>
           </span>
           {toCall > 0 && (
             <span>

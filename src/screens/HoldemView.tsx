@@ -1,9 +1,14 @@
+// שולחן טקסס הולדם - מסך מלא, השחקנים סביב שולחן אובלי ואני למטה
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Sparkles } from 'lucide-react';
 import { type HState, type HPlayer, potSize, computePots } from '../engine/holdem';
 import type { Card as C } from '../engine/cards';
 import { turnMs, MAX_STRIKES } from '../engine/common';
-import { Card, Hand } from '../components/Card';
-import { Timer } from '../components/Timer';
+import { canRebuyNow } from '../engine/room';
+import { Card } from '../components/Card';
+import { Avatar } from '../components/Avatar';
+import { ChipStack } from '../components/Chips';
+import { TurnBar, TurnRing } from '../components/TurnBar';
 import { HoldemTip } from '../components/Tips';
 import { Coach } from '../components/Coach';
 import { AsyncButton, toast } from '../components/ui';
@@ -24,14 +29,19 @@ function phaseLabel(ph: string, lang: Lang) {
   return (lang === 'he' ? he : en)[ph] ?? ph;
 }
 
-// מיקום המושבים סביב השולחן האובלי (אני תמיד למטה, מחוץ לשולחן)
+// מיקום מושב i מתוך n סביב השולחן. מושב 0 = למטה במרכז (אני)
 function seatPos(i: number, n: number) {
-  const deg = 180 + (360 * (i + 1)) / (n + 1);
-  const rad = (deg * Math.PI) / 180;
-  return { x: 50 + 41 * Math.sin(rad), y: 52 - 39 * Math.cos(rad) };
+  const rad = ((180 + (360 * i) / n) * Math.PI) / 180;
+  return { x: 50 + 38.5 * Math.sin(rad), y: 46 - 40 * Math.cos(rad) };
 }
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const ME_POS = { x: 50, y: 97 };
+const CENTER = { x: 50, y: 44 };
+
+function actionKind(code: string | null) {
+  if (!code) return '';
+  const k = code.split(':')[0];
+  return k === 'call' || k === 'check' ? 'pos' : k === 'raise' ? 'raise' : k === 'allin' ? 'allin' : k === 'fold' || k === 'left' ? 'fold' : 'blind';
+}
 
 export function HoldemView({
   s,
@@ -69,15 +79,18 @@ export function HoldemView({
   const [raiseTo, setRaiseTo] = useState(minTo);
   const [quip, setQuip] = useState('');
   const total = turnMs(s.settings);
+  const unit = Math.max(1, s.settings.sb);
 
-  // המושבים לפי הסדר אחריי (בכיוון השעון)
+  // סדר המושבים: אני למטה, ואחריי בכיוון השעון
   const myIdx = s.players.findIndex((p) => p.id === myId);
-  const others = myIdx >= 0 ? s.players.slice(myIdx + 1).concat(s.players.slice(0, myIdx)) : s.players;
-  const posOf = new Map(others.map((p, i) => [p.id, seatPos(i, others.length)]));
-  if (me) posOf.set(me.id, ME_POS);
+  const ordered = myIdx >= 0 ? s.players.slice(myIdx).concat(s.players.slice(0, myIdx)) : s.players;
+  const posOf = new Map(ordered.map((p, i) => [p.id, seatPos(i, Math.max(ordered.length, 2))]));
   const opponents = s.players.filter((p) => p.id !== myId && p.inHand && !p.folded).length;
   const winnerIds = new Set(s.winners.map((w) => w.id));
+  const winAmount = new Map(s.winners.map((w) => [w.id, w.amount]));
   const dealerId = s.players[s.dealerIdx]?.id;
+  const showdown = s.phase === 'showdown';
+  const running = s.phase !== 'waiting' && !showdown;
 
   useEffect(() => {
     setRaiseOpen(false);
@@ -85,7 +98,7 @@ export function HoldemView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.turnId, s.currentBet, s.phase]);
 
-  // צלילים לפי מה שהשתנה בשולחן
+  // צלילים ורטט לפי מה שהשתנה בשולחן
   const prev = useRef<HState | null>(null);
   useEffect(() => {
     const p = prev.current;
@@ -116,280 +129,256 @@ export function HoldemView({
   }, [s]);
 
   useEffect(() => {
-    if (s.phase !== 'showdown' || !s.winners.length) return;
+    if (!showdown || !s.winners.length) return;
     setQuip(winnerIds.has(myId) ? pick(theme.win) : me?.inHand ? pick(theme.lose) : '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.phase, s.handNo, lang]);
 
   // המארח מתחיל את היד הבאה אוטומטית
   useEffect(() => {
-    if (!isHost || s.phase !== 'showdown') return;
-    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), 6500);
+    if (!me || !showdown) return;
+    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), isHost ? 6500 : 9500 + Math.random() * 1500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHost, s.phase, s.handNo]);
+  }, [isHost, !!me, s.phase, s.handNo]);
 
   const readyPlayers = s.players.filter((p) => p.chips > 0 && !p.sitOut).length;
-  const myMade = hole.length === 2 && s.board.length >= 3 ? handName(bestHand(hole.concat(s.board)).cat, lang) : null;
-  const showdown = s.phase === 'showdown';
+  const made = hole.length === 2 && s.board.length >= 3 ? handName(bestHand(hole.concat(s.board)).cat, lang) : null;
+  // העלאה בגודל הקופה = הקופה אחרי שמשווים, מעל ההימור הנוכחי
+  const potAfterCall = pot + toCall;
+  const potPresets = [
+    { label: tr('מינ׳', 'Min'), to: minTo },
+    { label: '½', to: s.currentBet + Math.round(potAfterCall / 2) },
+    { label: '¾', to: s.currentBet + Math.round((potAfterCall * 3) / 4) },
+    { label: tr('קופה', 'Pot'), to: s.currentBet + potAfterCall },
+  ];
+  // אחרי אול-אין קצר, מי שכבר פעל יכול רק להשוות או לוותר
+  const canRaise = !!me && !me.acted && maxTo > s.currentBet;
 
   return (
-    <div className="hd">
-      <div className="poker-wrap">
-        <div className="poker-table">
-          <div className="table-brand">KING JACK</div>
+    <div className="pk">
+      <div className="pk-stage">
+        <div className="pk-table">
+          <div className="pk-felt">
+            <span className="pk-logo" translate="no">KING JACK</span>
+          </div>
         </div>
 
-        {/* מרכז השולחן: קופה וקלפים פתוחים */}
-        <div className="table-center">
-          <PotsDisplay s={s} pot={pot} lang={lang} />
-          <div className="center-meta">
-            <span className="phase-tag">{phaseLabel(s.phase, lang)}</span>
-            <BlindsClock s={s} lang={lang} />
-          </div>
-          <div className="board">
+        {/* מרכז: קופה, קלפים פתוחים, שלב ובליינדים */}
+        <div className="pk-center">
+          <Pots s={s} pot={pot} unit={unit} lang={lang} />
+          <div className="pk-board">
             {Array.from({ length: 5 }).map((_, i) =>
-              s.board[i] ? <Card key={i + s.board[i]} card={s.board[i]} size="md" /> : <div key={i} className="card slot md" />,
+              s.board[i] ? <Card key={i + s.board[i]} card={s.board[i]} size="md" /> : <span key={i} className="pk-slot" />,
             )}
           </div>
+          <div className="pk-meta">
+            <span>{phaseLabel(s.phase, lang)}</span>
+            <BlindsClock s={s} />
+          </div>
           {showdown && s.winners.length > 0 && (
-            <div className="winners">
+            <div className="pk-result">
               {s.winners.map((w) => {
                 const wp = s.players.find((p) => p.id === w.id);
+                const name = wp ? displayName(wp, lang) : w.name;
                 return (
-                  <div key={w.id}>
-                    🏆 {wp ? displayName(wp, lang) : w.name} +{fmt(w.amount)} {w.cat >= 0 && `· ${handName(w.cat, lang)}`}
+                  <div key={w.id} dir="auto">
+                    {w.cat >= 0 ? tr(`${name} עם ${handName(w.cat, lang)}`, `${name} with ${handName(w.cat, lang)}`) : tr(`${name} לקח/ה את הקופה`, `${name} takes the pot`)}
                   </div>
                 );
               })}
-              {quip && <div className="quip-inline">{quip}</div>}
+              {quip && <div className="pk-quip">{quip}</div>}
             </div>
           )}
         </div>
 
-        {/* השחקנים סביב השולחן */}
-        {others.map((p) => {
-          const pos = posOf.get(p.id)!;
-          return (
-            <Seat
-              key={p.id}
-              p={p}
-              pos={pos}
-              isTurn={s.turnId === p.id}
-              isWinner={winnerIds.has(p.id)}
-              isDealer={dealerId === p.id}
-              deadline={s.turnId === p.id ? s.turnDeadline : null}
-              total={total}
-              lang={lang}
-              onTap={() => onSeatTap(p.id)}
-            />
-          );
-        })}
+        {/* השחקנים */}
+        {ordered.map((p) => (
+          <Seat
+            key={p.id}
+            p={p}
+            pos={posOf.get(p.id)!}
+            isMe={p.id === myId}
+            isTurn={s.turnId === p.id}
+            isDealer={dealerId === p.id && s.phase !== 'waiting'}
+            waiting={s.phase === 'waiting'}
+            winAmount={winAmount.get(p.id)}
+            deadline={s.turnId === p.id ? s.turnDeadline : null}
+            total={total}
+            lang={lang}
+            onTap={() => onSeatTap(p.id)}
+          />
+        ))}
 
-        {/* ז׳טונים שהומרו בסיבוב הנוכחי */}
+        {/* הימורים בסיבוב הנוכחי */}
         {s.players
           .filter((p) => p.bet > 0 && posOf.has(p.id))
           .map((p) => {
             const pos = posOf.get(p.id)!;
-            const t = p.id === myId ? 0.22 : 0.42;
+            const t = p.id === myId ? 0.42 : 0.36;
             return (
-              <div key={'b' + p.id + p.bet} className="bet-chip" style={{ left: `${lerp(pos.x, 50, t)}%`, top: `${lerp(pos.y, 50, t)}%` }}>
-                <span className="chip-icon" />
-                {fmt(p.bet)}
-              </div>
+              <span key={'b' + p.id + p.bet} className="pk-bet" style={{ left: `${lerp(pos.x, CENTER.x, t)}%`, top: `${lerp(pos.y, CENTER.y, t)}%` }}>
+                <ChipStack amount={p.bet} unit={unit} size={16} />
+              </span>
             );
           })}
-
-        {/* כפתור הדילר */}
-        {dealerId &&
-          s.phase !== 'waiting' &&
-          posOf.has(dealerId) &&
-          (() => {
-            const pos = posOf.get(dealerId)!;
-            const x = dealerId === myId ? 63 : lerp(pos.x, 50, 0.16) + (pos.x < 50 ? 9 : -9);
-            const y = dealerId === myId ? 86 : lerp(pos.y, 50, 0.16) + (pos.y < 50 ? 6 : -6);
-            return (
-              <div className="dealer-btn floating" style={{ left: `${x}%`, top: `${y}%` }}>
-                D
-              </div>
-            );
-          })()}
 
         {/* ז׳טונים שעפים למנצח */}
         {showdown &&
           s.winners.map((w) => {
-            const pos = posOf.get(w.id) ?? ME_POS;
-            return Array.from({ length: 7 }).map((_, i) => (
+            const pos = posOf.get(w.id) ?? { x: 50, y: 86 };
+            return Array.from({ length: 8 }).map((_, i) => (
               <span
                 key={`${s.handNo}-${w.id}-${i}`}
                 className="fly-chip"
-                style={{ '--tx': `${pos.x}%`, '--ty': `${pos.y}%`, '--d': `${i * 70}ms` } as CSSProperties}
+                style={{ '--tx': `${pos.x}%`, '--ty': `${pos.y}%`, '--d': `${i * 60}ms` } as CSSProperties}
               />
             ));
           })}
+
+        {/* הקלפים שלי - גדולים, מעל המושב שלי */}
+        {me && hole.length === 2 && (
+          <div className={`pk-hole ${me.folded ? 'folded' : ''} ${winnerIds.has(myId) ? 'won' : ''}`}>
+            {hole.map((c, i) => (
+              <Card key={c + i} card={c} size="lg" delay={i * 90} />
+            ))}
+            {made && !me.folded && <span className="pk-made">{made}</span>}
+          </div>
+        )}
       </div>
 
-      {me && (
-        <div data-pid={myId} className={`me-area ${myTurn ? 'my-turn' : ''} ${me.folded ? 'dim' : ''} ${winnerIds.has(myId) ? 'winner' : ''}`}>
-          <div className="me-row">
-            <div className="me-cards">
-              {hole.length === 2 ? (
-                <Hand cards={hole} size="lg" stagger />
-              ) : (
-                <div className="me-idle">{me.sitOut ? tr('ישבת בצד 💤', 'Sitting out 💤') : tr('מחכה ליד הבאה', 'Waiting for the next hand')}</div>
-              )}
-            </div>
-            <div className="me-info">
-              <div className="my-chips">
-                {me.avatar} <b>{fmt(me.chips)}</b>
-              </div>
-              {me.lastAction && <div className="last-action">{actionLabel(me.lastAction, lang)}</div>}
-              {myMade && <div className="made">{myMade}</div>}
-            </div>
-          </div>
-          {me.sitOut && (
-            <AsyncButton className="btn primary block" onClick={() => act({ type: 'sitOut', value: false })}>
-              {tr('▶ אני חוזר למשחק!', "▶ I'm back in!")}
-            </AsyncButton>
-          )}
-          {!me.sitOut && (me.strikes ?? 0) > 0 && (me.strikes ?? 0) < MAX_STRIKES && (
-            <div className="strike-warn">{tr('⚠️ פספסת תור - עוד פעם אחת ותושב בצד', '⚠️ You missed a turn - one more and you sit out')}</div>
-          )}
-        </div>
-      )}
-
-      {myTurn && tipsOn && hole.length === 2 && <HoldemTip hole={hole} board={s.board} opponents={opponents} toCall={toCall} pot={pot} />}
-
-      <div className="action-bar">
-        {s.phase === 'waiting' &&
-          (isHost ? (
-            <AsyncButton className="btn primary block big" onClick={() => act({ type: 'start' })} disabled={readyPlayers < 2}>
-              {readyPlayers < 2 ? tr('צריך לפחות 2 שחקנים (אפשר להוסיף בוט ☰)', 'Need at least 2 players (add a bot in ☰)') : tr('▶ התחל יד', '▶ Start hand')}
-            </AsyncButton>
-          ) : (
-            me && <div className="waiting">{tr('מחכים שהמארח יתחיל ⏳', 'Waiting for the host to start ⏳')}</div>
-          ))}
-
-        {me && me.chips === 0 && !me.inHand && (
-          <button className="btn primary block" onClick={onRebuy}>
-            {tr(`נגמרו ה${theme.labels.chips} - קנייה נוספת 💰`, `Out of ${theme.labels.chips} - buy more 💰`)}
+      {/* אזור הפעולה */}
+      <div className="pk-actions">
+        {me?.sitOut && (
+          <AsyncButton className="pk-btn gold block" onClick={() => act({ type: 'sitOut', value: false })}>
+            {tr('אני חוזר למשחק', "I'm back in")}
+          </AsyncButton>
+        )}
+        {me && !me.sitOut && (me.strikes ?? 0) > 0 && (me.strikes ?? 0) < MAX_STRIKES && (
+          <div className="pk-note warn">{tr('פספסת תור - עוד פעם אחת ותושב בצד', 'You missed a turn - one more and you sit out')}</div>
+        )}
+        {me && canRebuyNow(s, myId) && (
+          <button className="pk-btn gold block" onClick={onRebuy}>
+            {tr('קנייה חוזרת', 'Rebuy')} · {fmt(s.settings.buyIn)}
           </button>
         )}
 
-        {s.phase !== 'waiting' && !showdown && !myTurn && me && (
-          <div className="turn-row">
+        {s.phase === 'waiting' &&
+          (me ? (
+            <AsyncButton className="pk-btn gold block" onClick={() => act({ type: 'start' })} disabled={readyPlayers < 2}>
+              {readyPlayers < 2 ? tr('צריך לפחות 2 שחקנים · אפשר להוסיף בוט בתפריט', 'Need 2+ players · add a bot from the menu') : tr('התחלת יד', 'Deal')}
+            </AsyncButton>
+          ) : (
+            <div className="pk-note">{tr('מחכים שמישהו בשולחן יחלק', 'Waiting for someone at the table to deal')}</div>
+          ))}
+
+        {running && !myTurn && turnPlayer && (
+          <div className="pk-waitrow">
             <span>
-              {tr('תור של', 'Turn:')} {turnPlayer?.avatar} {turnPlayer && displayName(turnPlayer, lang)}
+              {tr('תור של', 'Waiting for')} <b dir="auto">{displayName(turnPlayer, lang)}</b>
             </span>
-            <Timer deadline={s.turnDeadline} roomId={roomId} />
+            <TurnBar deadline={s.turnDeadline} total={total} roomId={roomId} />
           </div>
         )}
 
         {myTurn && me && (
           <>
-            {hole.length === 2 && <Coach roomId={roomId} premium={premium} contextKey={`${s.handNo}-${s.board.length}-${s.currentBet}`} />}
-            <div className="turn-row">
-              <span>
-                {tr('התור שלך!', 'Your turn!')} {toCall > 0 && tr(`(להשוות ${fmt(toCall)})`, `(${fmt(toCall)} to call)`)}
-              </span>
-              <Timer deadline={s.turnDeadline} roomId={roomId} mine />
+            <TurnBar deadline={s.turnDeadline} total={total} roomId={roomId} mine />
+            <div className="pk-hintrow">
+              {tipsOn && hole.length === 2 ? <HoldemTip hole={hole} board={s.board} opponents={opponents} toCall={toCall} pot={pot} compact /> : <span />}
+              {hole.length === 2 && <Coach roomId={roomId} premium={premium} contextKey={`${s.handNo}-${s.board.length}-${s.currentBet}`} compact />}
             </div>
             {raiseOpen ? (
-              <div className="raise-panel">
-                <div className="raise-value">
-                  {raiseTo >= maxTo
-                    ? theme.labels.allin
-                    : s.currentBet > 0
-                      ? tr(`העלאה ל-${fmt(raiseTo)}`, `Raise to ${fmt(raiseTo)}`)
-                      : tr(`הימור ${fmt(raiseTo)}`, `Bet ${fmt(raiseTo)}`)}
+              <div className="pk-raise">
+                <div className="pk-raise-top">
+                  <span className="pk-raise-amt">{raiseTo >= maxTo ? tr('אול-אין', 'All-in') : fmt(raiseTo)}</span>
+                  <div className="pk-presets">
+                    {potPresets.map((pp) => (
+                      <button key={pp.label} onClick={() => setRaiseTo(Math.min(maxTo, Math.max(minTo, pp.to)))}>
+                        {pp.label}
+                      </button>
+                    ))}
+                    <button className="allin" onClick={() => setRaiseTo(maxTo)}>
+                      {tr('הכל', 'All')}
+                    </button>
+                  </div>
                 </div>
                 <input
+                  className="pk-slider"
                   type="range"
+                  aria-label={tr('סכום ההעלאה', 'Raise amount')}
                   min={minTo}
                   max={maxTo}
                   step={Math.max(1, Math.floor(s.settings.bb / 2))}
                   value={raiseTo}
                   onChange={(e) => setRaiseTo(Number(e.target.value))}
                 />
-                <div className="bet-chips">
-                  <button className="chip" onClick={() => setRaiseTo(minTo)}>
-                    {tr('מינ׳', 'Min')}
-                  </button>
-                  <button className="chip" onClick={() => setRaiseTo(Math.min(maxTo, Math.max(minTo, s.currentBet + Math.round(pot / 2))))}>
-                    {tr('½ פוט', '½ Pot')}
-                  </button>
-                  <button className="chip" onClick={() => setRaiseTo(Math.min(maxTo, Math.max(minTo, s.currentBet + pot)))}>
-                    {tr('פוט', 'Pot')}
-                  </button>
-                  <button className="chip gold" onClick={() => setRaiseTo(maxTo)}>
-                    {tr('הכל', 'Max')}
-                  </button>
-                </div>
-                <div className="btn-grid two">
-                  <button className="btn ghost" onClick={() => setRaiseOpen(false)}>
+                <div className="pk-btnrow">
+                  <button className="pk-btn ghost" onClick={() => setRaiseOpen(false)}>
                     {tr('ביטול', 'Cancel')}
                   </button>
-                  <AsyncButton className="btn act raise" onClick={() => act(raiseTo >= maxTo ? { type: 'allin' } : { type: 'raise', to: raiseTo })}>
-                    {tr('אישור', 'Confirm')}
+                  <AsyncButton className="pk-btn gold" onClick={() => act(raiseTo >= maxTo ? { type: 'allin' } : { type: 'raise', to: raiseTo })}>
+                    {raiseTo >= maxTo
+                      ? tr('אול-אין', 'All-in')
+                      : s.currentBet > 0
+                        ? tr(`העלאה ל-${fmt(raiseTo)}`, `Raise to ${fmt(raiseTo)}`)
+                        : tr(`הימור ${fmt(raiseTo)}`, `Bet ${fmt(raiseTo)}`)}
                   </AsyncButton>
                 </div>
               </div>
             ) : (
-              <div className="btn-grid three">
-                <AsyncButton className="btn act fold" onClick={() => act({ type: 'fold' })}>
+              <div className="pk-btnrow three">
+                <AsyncButton className="pk-btn fold" onClick={() => act({ type: 'fold' })}>
                   {theme.labels.fold}
                 </AsyncButton>
                 {toCall === 0 ? (
-                  <AsyncButton className="btn act check" onClick={() => act({ type: 'check' })}>
+                  <AsyncButton className="pk-btn call" onClick={() => act({ type: 'check' })}>
                     {theme.labels.check}
                   </AsyncButton>
                 ) : (
-                  <AsyncButton className="btn act call" onClick={() => act(toCall >= me.chips ? { type: 'allin' } : { type: 'call' })}>
-                    {toCall >= me.chips ? theme.labels.allin : `${theme.labels.call} ${fmt(toCall)}`}
+                  <AsyncButton className="pk-btn call" onClick={() => act(toCall >= me.chips ? { type: 'allin' } : { type: 'call' })}>
+                    <span>{toCall >= me.chips ? theme.labels.allin : theme.labels.call}</span>
+                    <small>{fmt(Math.min(toCall, me.chips))}</small>
                   </AsyncButton>
                 )}
-                {maxTo > s.currentBet && (
-                  <button className="btn act raise" onClick={() => (minTo >= maxTo ? act({ type: 'allin' }) : setRaiseOpen(true))}>
+                {canRaise ? (
+                  <button className="pk-btn raise" onClick={() => (minTo >= maxTo ? act({ type: 'allin' }) : setRaiseOpen(true))}>
                     {minTo >= maxTo ? theme.labels.allin : theme.labels.raise}
                   </button>
+                ) : (
+                  <span />
                 )}
               </div>
             )}
           </>
         )}
 
-        {showdown && me && hole.length === 2 && !me.shown && (
-          <AsyncButton className="btn ghost block" onClick={() => act({ type: 'show' })}>
-            {tr('👀 הראה את הקלפים שלי', '👀 Show my cards')}
-          </AsyncButton>
-        )}
         {showdown && me && (
-          <AsyncButton className="btn primary block" onClick={() => act({ type: 'next' })}>
-            {tr('יד הבאה ▶', 'Next hand ▶')}
-          </AsyncButton>
+          <div className="pk-btnrow">
+            {hole.length === 2 && !me.shown && (
+              <AsyncButton className="pk-btn ghost" onClick={() => act({ type: 'show' })}>
+                {tr('הראה קלפים', 'Show cards')}
+              </AsyncButton>
+            )}
+            <AsyncButton className="pk-btn gold" onClick={() => act({ type: 'next' })}>
+              {tr('יד הבאה', 'Next hand')}
+            </AsyncButton>
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-// טבעת זמן סביב השחקן שבתור
-function TurnRing({ deadline, total }: { deadline: number; total: number }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
-  const frac = Math.max(0, Math.min(1, (deadline - now) / total));
-  return <div className={`turn-ring ${frac < 0.25 ? 'urgent' : ''}`} style={{ '--p': frac } as CSSProperties} />;
-}
-
+// מושב שחקן
 function Seat({
   p,
   pos,
+  isMe,
   isTurn,
-  isWinner,
   isDealer,
+  waiting,
+  winAmount,
   deadline,
   total,
   lang,
@@ -397,95 +386,112 @@ function Seat({
 }: {
   p: HPlayer;
   pos: { x: number; y: number };
+  isMe: boolean;
   isTurn: boolean;
-  isWinner: boolean;
   isDealer: boolean;
+  waiting: boolean;
+  winAmount?: number;
   deadline: number | null;
   total: number;
   lang: Lang;
   onTap: () => void;
 }) {
-  const out = p.folded || !p.inHand;
+  const out = p.folded || (!p.inHand && !waiting) || (waiting && (p.sitOut || p.chips <= 0));
+  const kind = actionKind(p.lastAction);
   return (
     <div
-      className={`pseat ${isDealer ? 'is-dealer' : ''} ${isTurn ? 'turn' : ''} ${out ? 'out' : ''} ${isWinner ? 'winner' : ''} ${pos.y < 50 ? 'top' : 'bottom'}`}
+      className={`pk-seat ${isMe ? 'me' : ''} ${isTurn ? 'turn' : ''} ${out ? 'out' : ''} ${winAmount ? 'winner' : ''} ${pos.y < 40 ? 'top' : ''}`}
       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
       data-pid={p.id}
       onClick={onTap}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onTap()}
       role="button"
+      tabIndex={isMe ? -1 : 0}
       aria-label={displayName(p, lang)}
     >
-      <div className={`pseat-cards ${p.shown ? 'shown' : ''}`}>
-        {p.shown ? <Hand cards={p.shown} size="sm" /> : p.inHand && !p.folded ? <Hand cards={[]} hiddenCount={2} size="xs" /> : null}
-      </div>
-      <div className="pseat-avatar">
+      {!isMe && p.inHand && !p.folded && !p.shown && (
+        <span className="pk-backs">
+          <Card card={null} size="xs" />
+          <Card card={null} size="xs" />
+        </span>
+      )}
+      {!isMe && p.shown && (
+        <span className="pk-shown">
+          <Card card={p.shown[0]} size="sm" />
+          <Card card={p.shown[1]} size="sm" />
+        </span>
+      )}
+      <span className="pk-av">
         {isTurn && deadline && <TurnRing deadline={deadline} total={total} />}
-        <span>{p.avatar}</span>
-        {p.sitOut && <span className="sit-out-badge">💤</span>}
-      </div>
-      <div className="pseat-plate">
-        <div className="pseat-name" dir="auto">
-          {displayName(p, lang)}
-        </div>
-        <div className="pseat-chips">{p.allIn ? (lang === 'he' ? 'אול-אין' : 'ALL-IN') : fmt(p.chips)}</div>
-      </div>
-      {p.lastAction && !p.allIn && !p.shown && <div className="pseat-action">{actionLabel(p.lastAction, lang)}</div>}
+        <Avatar name={p.name} emoji={p.avatar} bot={p.isBot} size={isMe ? 50 : 44} />
+        {isDealer && <span className="pk-dealer">D</span>}
+        {p.sitOut && <span className="pk-away">💤</span>}
+      </span>
+      <span className="pk-plate">
+        <span className="pk-name" dir="auto">
+          {isMe ? (lang === 'he' ? 'אני' : 'Me') : displayName(p, lang)}
+        </span>
+        <span className={`pk-stack ${p.allIn ? 'allin' : ''}`}>{p.allIn ? (lang === 'he' ? 'אול-אין' : 'All-in') : fmt(p.chips)}</span>
+      </span>
+      {p.lastAction && !p.shown && !winAmount && <span className={`pk-act ${kind}`}>{actionLabel(p.lastAction, lang)}</span>}
+      {winAmount ? (
+        <span className="pk-win" dir="ltr">
+          +{fmt(winAmount)}
+        </span>
+      ) : null}
     </div>
   );
 }
 
-// קופות ברורות: קופה ראשית + צדדיות, ובסוף היד - מי לקח כל קופה
-function PotsDisplay({ s, pot, lang }: { s: HState; pot: number; lang: Lang }) {
+// קופה ראשית + קופות צדדיות, ובסוף היד - מי לקח כל קופה
+function Pots({ s, pot, unit, lang }: { s: HState; pot: number; unit: number; lang: Lang }) {
   const he = lang === 'he';
   const nameOf = (id: string) => {
     const p = s.players.find((x) => x.id === id);
-    return p ? `${p.avatar} ${displayName(p, lang)}` : '?';
+    return p ? displayName(p, lang) : '?';
   };
   if (s.phase === 'showdown' && (s.potResults?.length ?? 0) > 1) {
     return (
-      <div className="pots">
+      <div className="pk-pots">
         {s.potResults!.map((r, i) => (
-          <div key={i} className={`pot-chip ${i === 0 ? 'main' : 'side'}`}>
-            <span className="chip-stack" />
-            <span>
-              {i === 0 ? (he ? 'ראשית' : 'Main') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(r.amount)}</b>
-            </span>
-            <span className="pot-winner">→ {r.winners.map(nameOf).join(', ')}</span>
-          </div>
+          <span key={i} className={`pk-pot ${i ? 'side' : ''}`}>
+            {i === 0 ? (he ? 'ראשית' : 'Main') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(r.amount)}</b> → {r.winners.map(nameOf).join(', ')}
+          </span>
         ))}
       </div>
     );
   }
   const running = s.phase !== 'waiting' && s.phase !== 'showdown';
-  const someoneAllIn = s.players.some((p) => p.inHand && !p.folded && p.allIn);
-  const pots = running && someoneAllIn ? computePots(s).filter((p) => p.eligible.length > 1) : [];
+  const anyAllIn = s.players.some((p) => p.inHand && !p.folded && p.allIn);
+  const pots = running && anyAllIn ? computePots(s).filter((p) => p.eligible.length > 1) : [];
   if (pots.length > 1) {
     return (
-      <div className="pots">
+      <div className="pk-pots">
         {pots.map((p, i) => (
-          <div key={i} className={`pot-chip ${i === 0 ? 'main' : 'side'}`}>
-            <span className="chip-stack" />
-            <span>
-              {i === 0 ? (he ? 'קופה ראשית' : 'Main pot') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(p.amount)}</b>
-            </span>
-            <span className="pot-elig">
+          <span key={i} className={`pk-pot ${i ? 'side' : ''}`}>
+            <ChipStack amount={p.amount} unit={unit} size={14} label={false} />
+            {i === 0 ? (he ? 'קופה ראשית' : 'Main pot') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(p.amount)}</b>
+            <small>
               {p.eligible.length} {he ? 'שחקנים' : 'players'}
-            </span>
-          </div>
+            </small>
+          </span>
         ))}
       </div>
     );
   }
+  if (pot <= 0) return <div className="pk-pots empty" />;
   return (
-    <div className="pot-pill" key={pot}>
-      <span className="chip-stack" />
-      {he ? 'קופה' : 'Pot'} <b>{fmt(pot)}</b>
+    <div className="pk-pots">
+      <span className="pk-pot main" key={pot}>
+        <ChipStack amount={pot} unit={unit} size={16} label={false} />
+        <b>{fmt(pot)}</b>
+      </span>
     </div>
   );
 }
 
-// בליינדים נוכחיים + כמה זמן עד שהם עולים
-function BlindsClock({ s, lang }: { s: HState; lang: Lang }) {
+// בליינדים + שעון לעלייה הבאה
+function BlindsClock({ s }: { s: HState }) {
   const [now, setNow] = useState(Date.now());
   const mins = s.settings.blindUpMinutes ?? 0;
   useEffect(() => {
@@ -494,13 +500,13 @@ function BlindsClock({ s, lang }: { s: HState; lang: Lang }) {
     return () => clearInterval(t);
   }, [mins]);
   const label = `${s.settings.sb}/${s.settings.bb}`;
-  if (!mins || s.levelStartedAt == null) return <span className="blinds-tag">{label}</span>;
+  if (!mins || s.levelStartedAt == null) return <span className="pk-blinds">{label}</span>;
   const left = Math.max(0, s.levelStartedAt + mins * 60000 - now);
   const mm = Math.floor(left / 60000);
   const ss = Math.floor((left % 60000) / 1000);
   return (
-    <span className={`blinds-tag up ${left < 60000 ? 'soon' : ''}`} title={lang === 'he' ? 'בליינדים עולים בעוד' : 'Blinds up in'}>
-      {label} · ⬆ {mm}:{String(ss).padStart(2, '0')}
+    <span className={`pk-blinds up ${left < 60000 ? 'soon' : ''}`}>
+      {label} <Sparkles size={11} /> {mm}:{String(ss).padStart(2, '0')}
     </span>
   );
 }

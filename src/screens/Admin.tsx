@@ -9,6 +9,7 @@ interface RoomLite {
   name: string;
   code: string;
   game_type: string;
+  money_mode: string;
   created_at: string;
   state: { players: { isBot: boolean }[] };
 }
@@ -24,7 +25,7 @@ export function Admin({ profile, onBack }: { profile: Profile; onBack: () => voi
   const load = useCallback(async () => {
     const [p, r] = await Promise.all([
       supabase.from('game_profiles').select('*').order('name'),
-      supabase.from('game_rooms').select('id, name, code, game_type, created_at, state').eq('status', 'open').order('created_at'),
+      supabase.from('game_rooms').select('id, name, code, game_type, money_mode, created_at, state').eq('status', 'open').order('created_at'),
     ]);
     setPlayers((p.data ?? []) as Profile[]);
     setRooms((r.data ?? []) as RoomLite[]);
@@ -45,7 +46,7 @@ export function Admin({ profile, onBack }: { profile: Profile; onBack: () => voi
   return (
     <div className="screen">
       <header className="topbar">
-        <button className="icon-btn" onClick={onBack}>
+        <button className="icon-btn" onClick={onBack} aria-label={lang === 'he' ? 'חזרה' : 'Back'}>
           {lang === 'he' ? '➜' : '⬅'}
         </button>
         <h1>{tr('🛡️ ניהול', '🛡️ Admin')}</h1>
@@ -141,12 +142,17 @@ export function Admin({ profile, onBack }: { profile: Profile; onBack: () => voi
               <AsyncButton
                 className="btn small ghost danger-text"
                 onClick={async () => {
-                  if (!confirm(tr('לסגור את השולחן? כולם יוצאים עם מה שיש להם.', 'Close this table? Everyone cashes out with what they have.'))) return;
-                  await adminCall({ action: 'forceClose', roomId: r.id });
-                  toast(tr('השולחן נסגר', 'Table closed'), 'win');
+                  const demo = r.money_mode === 'demo';
+                  const q = demo
+                    ? tr('למחוק את שולחן האימון לגמרי?', 'Delete this practice table completely?')
+                    : tr('לסגור את השולחן? כולם יוצאים עם מה שיש להם והחובות מחושבים.', 'Close this table? Everyone cashes out and debts are settled.');
+                  if (!confirm(q)) return;
+                  const res = await gameCall<{ ok: boolean; deleted?: boolean }>({ op: 'removeRoom', roomId: r.id });
+                  toast(res.deleted ? tr('השולחן נמחק', 'Table deleted') : tr('השולחן נסגר', 'Table closed'), 'win');
+                  await load();
                 }}
               >
-                {tr('סגירה', 'Close')}
+                {r.money_mode === 'demo' ? tr('מחיקה', 'Delete') : tr('סגירה', 'Close')}
               </AsyncButton>
             </div>
           ))}

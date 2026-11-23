@@ -1,6 +1,7 @@
 // בדיקת שימור ז׳טונים בבלאק ג׳ק
 import { createGame, act, joinGame } from '../src/engine/room.ts';
 import type { BJFull } from '../src/engine/blackjack.ts';
+let clock = 0; // מסך התוצאה מוצג לפחות 3 שניות לפני הסיבוב הבא
 
 const human = (id: string) => ({ id, name: id, avatar: 'x', isBot: false, chips: 0 });
 for (const mode of ['house', 'player'] as const) {
@@ -37,7 +38,7 @@ for (const mode of ['house', 'player'] as const) {
     if (Math.abs(sum - bought) > 0.01) throw new Error(`mismatch ${mode} r${r}: ${sum} vs ${bought}`);
     if (f.pub.phase !== 'results') throw new Error('phase ' + f.pub.phase);
     // בוט שנגמר לו הכסף קם מהשולחן עם השארית - יוצא מהספירה
-    bought -= act(f, 'h1', { type: 'next' }, 0).effects.filter((e) => e.kind === 'cashout').reduce((a, e) => a + e.amount, 0);
+    bought -= act(f, 'h1', { type: 'next' }, (clock += 5000)).effects.filter((e) => e.kind === 'cashout').reduce((a, e) => a + e.amount, 0);
   }
   console.log(mode, 'conserved OK, bot chips:', f.pub.players.find((p) => p.isBot)?.chips);
 }

@@ -219,6 +219,7 @@ export function leaveHoldem(f: HFull, playerId: string, now: number): LedgerEffe
   const p = s.players[idx];
   if (isHandRunning(s) && p.inHand) {
     p.leaving = true;
+    if (p.allIn && !p.folded) return [];
     if (!p.folded) {
       const wasTurn = s.turnId === p.id;
       p.folded = true;
@@ -334,9 +335,12 @@ function applyBet(f: HFull, p: HPlayer, move: HMove) {
       break;
     case 'allin':
     case 'raise': {
+      if (move.type === 'raise' && !(Number.isFinite(move.to) && move.to > 0)) fail('סכום לא תקין');
       const to = move.type === 'allin' ? p.bet + p.chips : Math.floor(move.to);
       const max = p.bet + p.chips;
       if (to > max) fail('אין מספיק ז׳טונים');
+      // מי שכבר פעל בסיבוב, ומאז היה רק אול-אין קצר (לא העלאה מלאה) - יכול רק להשוות או לוותר
+      if (to > s.currentBet && p.acted) fail('אחרי אול-אין קצר אפשר רק להשוות או לוותר');
       if (to <= s.currentBet) {
         if (move.type === 'allin') {
           put(max - p.bet);
@@ -648,7 +652,8 @@ function botDecision(f: HFull, p: HPlayer): HMove {
   const r = Math.random();
   // סף "יד חזקה" יורד ככל שיש פחות יריבים
   const strong = Math.min(0.85, 1.6 / (opps + 1));
-  const raiseTo = (frac: number) => {
+  const raiseTo = (frac: number): HMove => {
+    if (p.acted) return toCall > 0 ? { type: 'call' } : { type: 'check' };
     const size = Math.max(s.minRaise, Math.round(pot * frac));
     const to = s.currentBet + size;
     return to >= p.bet + p.chips ? ({ type: 'allin' } as HMove) : ({ type: 'raise', to } as HMove);

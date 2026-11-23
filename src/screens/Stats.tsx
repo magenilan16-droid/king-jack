@@ -1,7 +1,7 @@
 // סטטיסטיקה: טבלת דירוג, סטטיסטיקה אישית והיסטוריית ערבים
 import { useEffect, useState } from 'react';
 import { supabase, type Profile } from '../lib/supabase';
-import { fmt } from '../lib/balances';
+import { fmt, signed } from '../lib/balances';
 import { useI18n } from '../lib/i18n';
 import { Sheet } from '../components/ui';
 import { Settle } from '../components/Settle';
@@ -86,7 +86,7 @@ export function Stats({ profile, onBack }: { profile: Profile; onBack: () => voi
   return (
     <div className="screen has-nav">
       <header className="topbar">
-        <button className="icon-btn" onClick={onBack}>
+        <button className="icon-btn" onClick={onBack} aria-label={lang === 'he' ? 'חזרה' : 'Back'}>
           {lang === 'he' ? '➜' : '⬅'}
         </button>
         <h1>{tr('🏆 סטטיסטיקה', '🏆 Stats')}</h1>
@@ -136,8 +136,7 @@ export function Stats({ profile, onBack }: { profile: Profile; onBack: () => voi
                       </div>
                     </div>
                     <span className={`net ${Number(b.net) > 0 ? 'pos' : Number(b.net) < 0 ? 'neg' : ''}`}>
-                      {Number(b.net) > 0 ? '+' : ''}
-                      {fmt(Number(b.net))}
+                      {signed(Number(b.net))}
                     </span>
                   </div>
                 ))}
@@ -160,11 +159,11 @@ export function Stats({ profile, onBack }: { profile: Profile; onBack: () => voi
               </div>
             </div>
             <div className="stat-grid">
-              <Stat label={tr('רווח כולל', 'Total net')} value={`${total > 0 ? '+' : ''}${fmt(total)}`} tone={total > 0 ? 'pos' : total < 0 ? 'neg' : ''} />
+              <Stat label={tr('רווח כולל', 'Total net')} value={signed(total)} tone={total > 0 ? 'pos' : total < 0 ? 'neg' : ''} />
               <Stat label={tr('ערבים', 'Nights')} value={String(my.length)} />
               <Stat label={tr('ערבים ברווח', 'Winning nights')} value={my.length ? `${Math.round((wins / my.length) * 100)}%` : '-'} />
               <Stat label={tr('ממוצע לערב', 'Avg per night')} value={my.length ? fmt(total / my.length) : '-'} />
-              <Stat label={tr('הערב הכי טוב', 'Best night')} value={my.length ? `+${fmt(best)}` : '-'} tone="pos" />
+              <Stat label={tr('הערב הכי טוב', 'Best night')} value={my.length ? signed(best) : '-'} tone="pos" />
               <Stat label={tr('הערב הכי גרוע', 'Worst night')} value={my.length ? fmt(worst) : '-'} tone="neg" />
             </div>
             <h3 className="section-title">{tr('📜 ההיסטוריה שלי', '📜 My history')}</h3>
@@ -178,8 +177,7 @@ export function Stats({ profile, onBack }: { profile: Profile; onBack: () => voi
                     <div className="sub">{dateFmt(r.closed_at)}</div>
                   </div>
                   <span className={`net ${Number(r.net) > 0 ? 'pos' : Number(r.net) < 0 ? 'neg' : ''}`}>
-                    {Number(r.net) > 0 ? '+' : ''}
-                    {fmt(Number(r.net))}
+                    {signed(Number(r.net))}
                   </span>
                 </button>
               ))}

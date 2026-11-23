@@ -41,6 +41,7 @@ export interface BJSettings {
 }
 
 export interface BJState {
+  betDeadline?: number | null; // אחרי ההימור הראשון בסיבוב - מתי מחלקים גם בלי מי שלא הימר
   kind: 'blackjack';
   phase: 'betting' | 'playing' | 'results';
   players: BJPlayer[];
@@ -236,19 +237,24 @@ export function actBlackjack(f: BJFull, actorId: string, move: BJMove, now: numb
       if (s.phase !== 'betting') fail('אי אפשר להמר עכשיו');
       if (!me) fail('אתה לא בשולחן');
       if (s.bankerId === me.id) fail('הבנק לא מהמר');
-      const amt = Math.floor(move.amount);
+      const amt = Math.floor(Number(move.amount));
+      if (!Number.isFinite(amt)) fail('סכום לא תקין');
       if (amt < s.settings.minBet || amt > s.settings.maxBet)
         fail(`הימור בין ${s.settings.minBet} ל-${s.settings.maxBet}`);
       if (amt > me.chips) fail('אין מספיק ז׳טונים');
       me.bet = amt;
       me.ready = true;
       me.strikes = 0;
+      if (!s.betDeadline) s.betDeadline = now + betWindowMs(s);
       if (allHumansReady(s)) deal(f, now);
       break;
     }
     case 'deal': {
       if (s.phase !== 'betting') fail('כבר מחלקים');
-      if (actorId !== s.hostId) fail('רק המארח יכול לחלק');
+      const late = !!s.betDeadline && now >= s.betDeadline;
+      if (actorId !== s.hostId && !late) fail('רק המארח יכול לחלק עכשיו');
+      // מי שלא הימר בזמן - מקבל "פספוס"; אחרי 2 ברצף הוא כבר לא מעכב את החלוקה
+      for (const p of bettors(s)) if (!p.isBot && !p.ready && p.chips >= s.settings.minBet) p.strikes = (p.strikes ?? 0) + 1;
       deal(f, now);
       break;
     }
@@ -300,6 +306,11 @@ function bettors(s: BJState) {
   return s.players.filter((p) => p.id !== s.bankerId && !p.leaving);
 }
 
+// כמה זמן מחכים לשאר המהמרים אחרי ההימור הראשון
+export function betWindowMs(s: BJState) {
+  return Math.max(20000, turnMs(s.settings));
+}
+
 function allHumansReady(s: BJState): boolean {
   // מי שפספס תורות ברצף לא מעכב את החלוקה
   const humans = bettors(s).filter((p) => !p.isBot && p.chips >= s.settings.minBet && (p.strikes ?? 0) < MAX_STRIKES);
@@ -316,6 +327,7 @@ function startBetting(f: BJFull): LedgerEffect[] {
   s.phase = 'betting';
   s.turn = null;
   s.turnDeadline = null;
+  s.betDeadline = null;
   s.dealer = { cards: [], hidden: false };
   for (const p of s.players) {
     p.hands = [];
@@ -327,6 +339,7 @@ function startBetting(f: BJFull): LedgerEffect[] {
 
 function deal(f: BJFull, now: number) {
   const s = f.pub;
+  s.betDeadline = null;
   if (f.sec.shoe.length < 80) {
     f.sec.shoe = shuffle(newDeck(6));
     log(s, '🔀 ערבוב חפיסות חדש');

@@ -4,7 +4,7 @@ import { ChevronDown, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useI18n, type Lang } from '../lib/i18n';
 import { actionLabel, displayName, handName } from '../lib/display';
-import { fmt } from '../lib/balances';
+import { fmt, signed } from '../lib/balances';
 import { Hand } from './Card';
 import type { HoldemHandRecord } from '../engine/holdem';
 import type { BlackjackHandRecord } from '../engine/blackjack';
@@ -105,8 +105,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
               </span>
               {p.shown && <Hand cards={p.shown} size="sm" />}
               <b className={p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : ''}>
-                {p.net > 0 ? '+' : ''}
-                {fmt(p.net)}
+                {signed(p.net)}
               </b>
             </div>
           ))}
@@ -150,7 +149,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
               <span>
                 {rec.players
                   .filter((p) => p.net !== 0)
-                  .map((p) => `${name(p.id)} ${p.net > 0 ? '+' : ''}${fmt(p.net)}`)
+                  .map((p) => `${name(p.id)} ${signed(p.net)}`)
                   .join(' · ')}
               </span>
             </div>
@@ -190,8 +189,7 @@ function BlackjackCard({ rec, at, myId }: { rec: BlackjackHandRecord; at: string
               <Hand key={i} cards={h.cards} size="sm" />
             ))}
             <b className={p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : ''}>
-              {p.net > 0 ? '+' : ''}
-              {fmt(p.net)}
+              {signed(p.net)}
             </b>
           </div>
         ))}

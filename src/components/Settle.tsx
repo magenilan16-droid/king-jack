@@ -1,7 +1,7 @@
 // מסך מאזן וקיזוז: מי קנה כמה, מי ברווח, ומי מעביר למי
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { computeLines, fmt, KUPA_ID } from '../lib/balances';
+import { computeLines, fmt, signed, KUPA_ID } from '../lib/balances';
 import { useI18n } from '../lib/i18n';
 import type { LedgerRow, RoomRow } from '../lib/useRoom';
 
@@ -31,7 +31,7 @@ export function Settle({ room, ledger, moneyMode }: { room: RoomRow; ledger: Led
     const head = `👑 King Jack · ${room.name} - ${live ? tr('מצב נוכחי', 'current standings') : tr('סיכום ערב', 'night summary')}${
       moneyMode === 'demo' ? tr(' (אימון)', ' (practice)') : ''
     }`;
-    const rows = lines.map((l) => `${l.avatar} ${l.name}: ${l.net > 0 ? '+' : ''}${fmt(l.net)}`);
+    const rows = lines.map((l) => `${l.avatar} ${l.name}: ${signed(l.net)}`);
     const tr2 = transfers.map((t) =>
       lang === 'he' ? `💸 ${t.fromName} מעביר/ה ל${t.toName} ${fmt(t.amount)}₪` : `💸 ${t.fromName} pays ${t.toName} ₪${fmt(t.amount)}`,
     );
@@ -62,8 +62,7 @@ export function Settle({ room, ledger, moneyMode }: { room: RoomRow; ledger: Led
               <td>{fmt(l.buyin)}</td>
               <td>{fmt(l.out)}</td>
               <td className={l.net > 0 ? 'pos' : l.net < 0 ? 'neg' : ''}>
-                {l.net > 0 ? '+' : ''}
-                {fmt(l.net)}
+                {signed(l.net)}
               </td>
             </tr>
           ))}
@@ -73,8 +72,7 @@ export function Settle({ room, ledger, moneyMode }: { room: RoomRow; ledger: Led
               <td />
               <td />
               <td className={kupa > 0 ? 'pos' : 'neg'}>
-                {kupa > 0 ? '+' : ''}
-                {fmt(kupa)}
+                {signed(kupa)}
               </td>
             </tr>
           )}

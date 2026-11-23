@@ -50,8 +50,8 @@ self.addEventListener('push', (e) => {
       data: { url: d.url || './' },
       tag: d.tag || undefined,
       renotify: !!d.tag,
-      dir: 'rtl',
-      lang: 'he',
+      dir: d.lang === 'en' ? 'ltr' : 'rtl',
+      lang: d.lang === 'en' ? 'en' : 'he',
       vibrate: [120, 60, 120],
     }),
   );

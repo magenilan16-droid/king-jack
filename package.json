@@ -12,6 +12,7 @@
     "bundle:game": "node scripts/sync-engine.mjs && npx -y esbuild@0.25.0 supabase/functions/game/index.ts --bundle --format=esm --platform=neutral --target=es2022 --external:npm:* --minify-whitespace --minify-syntax --legal-comments=none --charset=utf8 --outfile=supabase/functions/game/dist/index.js"
   },
   "dependencies": {
+    "@fontsource/barlow-condensed": "^5.3.0",
     "@fontsource/rubik": "^5.3.0",
     "@supabase/supabase-js": "^2.119.0",
     "lucide-react": "^1.77.0",

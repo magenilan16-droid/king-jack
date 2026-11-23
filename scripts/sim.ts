@@ -61,6 +61,7 @@ if (bestHand('Ah Kd 3c 4s 5h 9d 2c'.split(' ')).score <= bestHand('Kh Qd Jc 9s 8
     }
     if (f.pub.players.filter((x) => x.isBot).length < 2) bought += act(f, 'h1', { type: 'addBot' }, now).effects.reduce((a, e) => a + e.amount, 0);
     const before = f.pub.players.length;
+    now += 5000; // מסך התוצאה מוצג לפחות 3 שניות
     const res = act(f, 'h1', f.pub.phase === 'waiting' ? { type: 'start' } : { type: 'next' }, now);
     cashed += res.effects.filter((e) => e.kind === 'cashout').reduce((a, e) => a + e.amount, 0);
     bought += res.effects.filter((e) => e.kind === 'buyin').reduce((a, e) => a + e.amount, 0);
@@ -96,6 +97,7 @@ for (const mode of ['house', 'player'] as const) {
         act(f, p.id, { type: 'stand' }, now);
       }
     }
+    now += 5000;
     act(f, 'h1', { type: 'next' }, now);
   }
   const res = act(f, 'h1', { type: 'close' }, now);

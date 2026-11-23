@@ -24,7 +24,7 @@ export function Install({ onBack }: { onBack: () => void }) {
   return (
     <div className="screen">
       <header className="topbar">
-        <button className="icon-btn" onClick={onBack}>
+        <button className="icon-btn" onClick={onBack} aria-label={lang === 'he' ? 'חזרה' : 'Back'}>
           {lang === 'he' ? '➜' : '⬅'}
         </button>
         <h1>{tr('📲 התקנה בטלפון', '📲 Install on your phone')}</h1>

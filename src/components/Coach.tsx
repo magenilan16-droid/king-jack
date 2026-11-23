@@ -1,5 +1,6 @@
 // כפתור המאמן האישי (פרימיום): שולח את המצב לשרת ומציג המלצה קצרה
 import { useEffect, useState, type ReactNode } from 'react';
+import { Lock } from 'lucide-react';
 import { coachCall } from '../lib/supabase';
 import { useI18n } from '../lib/i18n';
 import { toast } from './ui';
@@ -11,7 +12,17 @@ function withBold(text: string): ReactNode[] {
   );
 }
 
-export function Coach({ roomId, premium, contextKey }: { roomId: string; premium: boolean; contextKey: string }) {
+export function Coach({
+  roomId,
+  premium,
+  contextKey,
+  compact = false,
+}: {
+  roomId: string;
+  premium: boolean;
+  contextKey: string;
+  compact?: boolean;
+}) {
   const { tr } = useI18n();
   const [tip, setTip] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -38,10 +49,10 @@ export function Coach({ roomId, premium, contextKey }: { roomId: string; premium
   };
 
   return (
-    <div className="coach">
+    <div className={compact ? 'coach compact' : 'coach'}>
       {tip && (
         <div className="coach-bubble">
-          <span className="coach-avatar">🤖</span>
+          {!compact && <span className="coach-avatar">🤖</span>}
           <div className="grow" dir="auto">
             {withBold(tip)}
           </div>
@@ -54,11 +65,19 @@ export function Coach({ roomId, premium, contextKey }: { roomId: string; premium
         <button className={`coach-btn ${premium ? '' : 'locked'}`} onClick={ask} disabled={busy}>
           {busy ? (
             <>
-              <span className="spinner" /> {tr('המאמן חושב...', 'The coach is thinking...')}
+              <span className="spinner" /> {tr('המאמן חושב…', 'The coach is thinking…')}
             </>
           ) : (
             <>
-              🤖 {tr('מה המאמן אומר?', 'Ask the coach')} {!premium && <span className="tag gold">⭐</span>}
+              {compact ? (
+                <>
+                  {!premium && <Lock size={12} />} {tr('מאמן', 'Coach')}
+                </>
+              ) : (
+                <>
+                  🤖 {tr('מה המאמן אומר?', 'Ask the coach')} {!premium && <span className="tag gold">⭐</span>}
+                </>
+              )}
             </>
           )}
         </button>

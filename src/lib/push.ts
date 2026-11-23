@@ -1,6 +1,7 @@
 // התראות פוש: רישום ה-Service Worker והרשמה לקבלת התראות
 import { supabase } from './supabase';
 import { tr } from './i18n';
+import { isIOS, isInAppBrowser, isStandalone } from './platform';
 
 const VAPID = import.meta.env.VITE_VAPID_PUBLIC_KEY as string;
 
@@ -41,15 +42,67 @@ function b64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
-// חייב להיקרא מתוך לחיצה של המשתמש
+// מה קרה כשניסינו להפעיל התראות - כדי להראות למשתמש בדיוק מה לעשות
+export type PushStatus = 'ok' | 'ios-install' | 'inapp' | 'unsupported' | 'denied' | 'dismissed' | 'timeout' | 'error';
+
+const TIMEOUT = Symbol('timeout');
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | typeof TIMEOUT> {
+  return Promise.race([p, new Promise<typeof TIMEOUT>((r) => setTimeout(() => r(TIMEOUT), ms))]);
+}
+
+// מחכה ל-Service Worker פעיל (ואם אין רישום - נרשם מחדש)
+async function readyRegistration(): Promise<ServiceWorkerRegistration> {
+  let reg = await navigator.serviceWorker.getRegistration();
+  if (!reg) reg = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' });
+  if (reg.active) return reg;
+  return navigator.serviceWorker.ready;
+}
+
+function sameKey(sub: PushSubscription, key: Uint8Array) {
+  const cur = sub.options?.applicationServerKey;
+  if (!cur) return true;
+  const a = new Uint8Array(cur);
+  return a.length === key.length && a.every((v, i) => v === key[i]);
+}
+
+// חייב להיקרא מתוך לחיצה של המשתמש. לא זורק שגיאות - מחזיר סטטוס
+export async function enablePushFlow(): Promise<{ status: PushStatus; detail?: string }> {
+  if (isInAppBrowser) return { status: 'inapp' };
+  if (!pushSupported()) return { status: isIOS && !isStandalone() ? 'ios-install' : 'unsupported' };
+  if (!VAPID) return { status: 'error', detail: 'missing key' };
+  if (Notification.permission === 'denied') return { status: 'denied' };
+  try {
+    if (Notification.permission !== 'granted') {
+      // אם הטלפון לא מציג חלון אישור (למשל כרום במצב "שקט") - לא נתקעים לנצח
+      const perm = await withTimeout(Notification.requestPermission(), 15000);
+      if (perm === TIMEOUT) return { status: 'timeout' };
+      if (perm === 'denied') return { status: 'denied' };
+      if (perm !== 'granted') return { status: 'dismissed' };
+    }
+    const reg = await withTimeout(readyRegistration(), 10000);
+    if (reg === TIMEOUT) return { status: 'error', detail: 'service worker not ready' };
+    const key = b64ToBytes(VAPID);
+    let sub = await reg.pushManager.getSubscription();
+    if (sub && !sameKey(sub, key)) {
+      await sub.unsubscribe().catch(() => {});
+      sub = null;
+    }
+    if (!sub) {
+      const s = await withTimeout(reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }), 15000);
+      if (s === TIMEOUT) return { status: 'error', detail: 'subscribe timeout' };
+      sub = s;
+    }
+    await saveSubscription(sub);
+    return { status: 'ok' };
+  } catch (e) {
+    return { status: 'error', detail: (e as Error)?.message };
+  }
+}
+
+// גרסה שזורקת שגיאה (לשימוש פנימי)
 export async function enablePush(): Promise<void> {
-  if (!pushSupported()) throw new Error(tr('המכשיר/הדפדפן לא תומך בהתראות. באייפון - צריך קודם להתקין למסך הבית', 'This device/browser does not support notifications. On iPhone - install to the home screen first'));
-  const perm = await Notification.requestPermission();
-  if (perm !== 'granted') throw new Error(tr('ההתראות נחסמו. אפשר לאשר בהגדרות הטלפון', 'Notifications are blocked. You can allow them in your phone settings'));
-  const reg = await navigator.serviceWorker.ready;
-  let sub = await reg.pushManager.getSubscription();
-  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(VAPID) });
-  await saveSubscription(sub);
+  const r = await enablePushFlow();
+  if (r.status !== 'ok') throw new Error(r.detail || r.status);
 }
 
 async function saveSubscription(sub: PushSubscription) {
@@ -62,14 +115,27 @@ async function saveSubscription(sub: PushSubscription) {
   if (error) throw new Error(tr('שמירת ההתראות נכשלה', 'Failed to save notification settings'));
 }
 
+// ביציאה מהחשבון: המכשיר הזה מפסיק לקבל התראות של המשתמש שיצא
+export async function forgetPushOnThisDevice() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = await reg?.pushManager.getSubscription();
+    if (sub) await supabase.from('game_push_subs').delete().eq('endpoint', sub.endpoint);
+  } catch {
+    /* ignore */
+  }
+}
+
 // אם כבר אושר בעבר - מוודא שהמנוי שמור למשתמש הנוכחי
 export async function refreshPushIfGranted() {
   if (pushPermission() !== 'granted') return;
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await withTimeout(readyRegistration(), 10000);
+    if (reg === TIMEOUT) return;
     const sub = await reg.pushManager.getSubscription();
-    if (sub) await saveSubscription(sub);
-    else await enablePush();
+    if (sub && sameKey(sub, b64ToBytes(VAPID))) await saveSubscription(sub);
+    else await enablePushFlow();
   } catch {
     /* ignore */
   }
