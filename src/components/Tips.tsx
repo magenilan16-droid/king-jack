@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import type { Card } from '../engine/cards';
 import { basicStrategy, strategyExplain, MOVE_HE, MOVE_EN } from '../engine/strategy';
-import { equity } from '../engine/equity';
+import { equityAsync } from '../lib/equityAsync';
 import { bestHand } from '../engine/handEval';
 import type { Theme } from '../lib/themes';
 import { useI18n } from '../lib/i18n';
@@ -58,9 +58,12 @@ export function HoldemTip({
   useEffect(() => {
     setEq(null);
     if (hole.length !== 2) return;
-    // חישוב ברקע כדי לא לתקוע את המסך
-    const t = setTimeout(() => setEq(equity(hole, board, Math.max(1, opponents), 1500)), 30);
-    return () => clearTimeout(t);
+    // חישוב בעובד רקע כדי לא לתקוע את המסך
+    let alive = true;
+    equityAsync(hole, board, Math.max(1, opponents), 2000).then((v) => alive && setEq(v));
+    return () => {
+      alive = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   if (hole.length !== 2) return null;

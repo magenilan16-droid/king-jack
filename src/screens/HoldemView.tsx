@@ -1,16 +1,20 @@
-import { useEffect, useState } from 'react';
-import { type HState, type HPlayer, potSize } from '../engine/holdem';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { type HState, type HPlayer, potSize, computePots } from '../engine/holdem';
 import type { Card as C } from '../engine/cards';
+import { turnMs, MAX_STRIKES } from '../engine/common';
 import { Card, Hand } from '../components/Card';
 import { Timer } from '../components/Timer';
 import { HoldemTip } from '../components/Tips';
-import { AsyncButton } from '../components/ui';
+import { Coach } from '../components/Coach';
+import { AsyncButton, toast } from '../components/ui';
 import type { Theme } from '../lib/themes';
 import { pick } from '../lib/themes';
 import { fmt } from '../lib/balances';
 import { bestHand } from '../engine/handEval';
 import { useI18n, type Lang } from '../lib/i18n';
 import { actionLabel, displayName, handName } from '../lib/display';
+import { sfx } from '../lib/sound';
+import { vibrate } from '../lib/prefs';
 
 type Act = (move: Record<string, unknown>) => Promise<void>;
 
@@ -20,6 +24,15 @@ function phaseLabel(ph: string, lang: Lang) {
   return (lang === 'he' ? he : en)[ph] ?? ph;
 }
 
+// מיקום המושבים סביב השולחן האובלי (אני תמיד למטה, מחוץ לשולחן)
+function seatPos(i: number, n: number) {
+  const deg = 180 + (360 * (i + 1)) / (n + 1);
+  const rad = (deg * Math.PI) / 180;
+  return { x: 50 + 41 * Math.sin(rad), y: 52 - 39 * Math.cos(rad) };
+}
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const ME_POS = { x: 50, y: 97 };
+
 export function HoldemView({
   s,
   roomId,
@@ -27,8 +40,10 @@ export function HoldemView({
   hole,
   theme,
   tipsOn,
+  premium,
   act,
   onRebuy,
+  onSeatTap,
 }: {
   s: HState;
   roomId: string;
@@ -36,8 +51,10 @@ export function HoldemView({
   hole: C[];
   theme: Theme;
   tipsOn: boolean;
+  premium: boolean;
   act: Act;
   onRebuy: () => void;
+  onSeatTap: (id: string) => void;
 }) {
   const { tr, lang } = useI18n();
   const me = s.players.find((p) => p.id === myId);
@@ -51,15 +68,16 @@ export function HoldemView({
   const [raiseOpen, setRaiseOpen] = useState(false);
   const [raiseTo, setRaiseTo] = useState(minTo);
   const [quip, setQuip] = useState('');
+  const total = turnMs(s.settings);
 
-  // המושבים מסודרים לפי הסדר אחריי
+  // המושבים לפי הסדר אחריי (בכיוון השעון)
   const myIdx = s.players.findIndex((p) => p.id === myId);
-  const others = s.players
-    .slice(myIdx + 1)
-    .concat(s.players.slice(0, Math.max(0, myIdx)))
-    .filter((p) => p.id !== myId);
+  const others = myIdx >= 0 ? s.players.slice(myIdx + 1).concat(s.players.slice(0, myIdx)) : s.players;
+  const posOf = new Map(others.map((p, i) => [p.id, seatPos(i, others.length)]));
+  if (me) posOf.set(me.id, ME_POS);
   const opponents = s.players.filter((p) => p.id !== myId && p.inHand && !p.folded).length;
   const winnerIds = new Set(s.winners.map((w) => w.id));
+  const dealerId = s.players[s.dealerIdx]?.id;
 
   useEffect(() => {
     setRaiseOpen(false);
@@ -67,11 +85,41 @@ export function HoldemView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.turnId, s.currentBet, s.phase]);
 
+  // צלילים לפי מה שהשתנה בשולחן
+  const prev = useRef<HState | null>(null);
+  useEffect(() => {
+    const p = prev.current;
+    prev.current = s;
+    if (!p) return;
+    if (s.handNo !== p.handNo) sfx.shuffle();
+    else if (s.board.length > p.board.length) sfx.card();
+    const grew = potSize(s) - potSize(p);
+    if (grew > 0 && s.handNo === p.handNo) sfx.chips(Math.min(6, 2 + Math.round(grew / Math.max(1, s.settings.bb * 3))));
+    if ((s.blindLevel ?? 0) > (p.blindLevel ?? 0)) {
+      sfx.blindsUp();
+      toast(tr(`⬆ הבליינדים עלו ל-${s.settings.sb}/${s.settings.bb}`, `⬆ Blinds are now ${s.settings.sb}/${s.settings.bb}`), 'win');
+    }
+    for (const pl of s.players) {
+      const old = p.players.find((x) => x.id === pl.id);
+      if (!old || old.lastAction === pl.lastAction) continue;
+      if (pl.lastAction === 'check') sfx.check();
+      else if (pl.lastAction === 'fold') sfx.fold();
+      else if (pl.lastAction === 'allin') sfx.allIn();
+    }
+    if (s.phase === 'showdown' && p.phase !== 'showdown' && s.winners.length) {
+      if (s.winners.some((w) => w.id === myId)) {
+        sfx.win();
+        vibrate([60, 40, 60, 40, 160]);
+      } else if (me?.inHand) sfx.lose();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s]);
+
   useEffect(() => {
     if (s.phase !== 'showdown' || !s.winners.length) return;
     setQuip(winnerIds.has(myId) ? pick(theme.win) : me?.inHand ? pick(theme.lose) : '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.phase, s.handNo]);
+  }, [s.phase, s.handNo, lang]);
 
   // המארח מתחיל את היד הבאה אוטומטית
   useEffect(() => {
@@ -83,46 +131,110 @@ export function HoldemView({
 
   const readyPlayers = s.players.filter((p) => p.chips > 0 && !p.sitOut).length;
   const myMade = hole.length === 2 && s.board.length >= 3 ? handName(bestHand(hole.concat(s.board)).cat, lang) : null;
+  const showdown = s.phase === 'showdown';
 
   return (
     <div className="hd">
-      <div className={`seats hd-seats n${Math.min(others.length, 9)}`}>
-        {others.map((p) => (
-          <HSeat key={p.id} p={p} s={s} isTurn={s.turnId === p.id} isWinner={winnerIds.has(p.id)} lang={lang} />
-        ))}
-      </div>
-
-      <div className="board-area">
-        <div className="pot">
-          💰 {tr('פוט', 'Pot')}: <b>{fmt(pot)}</b>
-          <span className="phase-tag">{phaseLabel(s.phase, lang)}</span>
+      <div className="poker-wrap">
+        <div className="poker-table">
+          <div className="table-brand">KING JACK</div>
         </div>
-        <div className="board">
-          {Array.from({ length: 5 }).map((_, i) =>
-            s.board[i] ? <Card key={i + s.board[i]} card={s.board[i]} size="md" /> : <div key={i} className="card slot md" />,
+
+        {/* מרכז השולחן: קופה וקלפים פתוחים */}
+        <div className="table-center">
+          <PotsDisplay s={s} pot={pot} lang={lang} />
+          <div className="center-meta">
+            <span className="phase-tag">{phaseLabel(s.phase, lang)}</span>
+            <BlindsClock s={s} lang={lang} />
+          </div>
+          <div className="board">
+            {Array.from({ length: 5 }).map((_, i) =>
+              s.board[i] ? <Card key={i + s.board[i]} card={s.board[i]} size="md" /> : <div key={i} className="card slot md" />,
+            )}
+          </div>
+          {showdown && s.winners.length > 0 && (
+            <div className="winners">
+              {s.winners.map((w) => {
+                const wp = s.players.find((p) => p.id === w.id);
+                return (
+                  <div key={w.id}>
+                    🏆 {wp ? displayName(wp, lang) : w.name} +{fmt(w.amount)} {w.cat >= 0 && `· ${handName(w.cat, lang)}`}
+                  </div>
+                );
+              })}
+              {quip && <div className="quip-inline">{quip}</div>}
+            </div>
           )}
         </div>
-        {s.phase === 'showdown' && s.winners.length > 0 && (
-          <div className="winners">
-            {s.winners.map((w) => {
-              const wp = s.players.find((p) => p.id === w.id);
-              return (
-                <div key={w.id}>
-                  🏆 {wp ? displayName(wp, lang) : w.name} +{fmt(w.amount)} {w.cat >= 0 && `· ${handName(w.cat, lang)}`}
-                </div>
-              );
-            })}
-            {quip && <div className="quip-inline">{quip}</div>}
-          </div>
-        )}
+
+        {/* השחקנים סביב השולחן */}
+        {others.map((p) => {
+          const pos = posOf.get(p.id)!;
+          return (
+            <Seat
+              key={p.id}
+              p={p}
+              pos={pos}
+              isTurn={s.turnId === p.id}
+              isWinner={winnerIds.has(p.id)}
+              isDealer={dealerId === p.id}
+              deadline={s.turnId === p.id ? s.turnDeadline : null}
+              total={total}
+              lang={lang}
+              onTap={() => onSeatTap(p.id)}
+            />
+          );
+        })}
+
+        {/* ז׳טונים שהומרו בסיבוב הנוכחי */}
+        {s.players
+          .filter((p) => p.bet > 0 && posOf.has(p.id))
+          .map((p) => {
+            const pos = posOf.get(p.id)!;
+            const t = p.id === myId ? 0.22 : 0.42;
+            return (
+              <div key={'b' + p.id + p.bet} className="bet-chip" style={{ left: `${lerp(pos.x, 50, t)}%`, top: `${lerp(pos.y, 50, t)}%` }}>
+                <span className="chip-icon" />
+                {fmt(p.bet)}
+              </div>
+            );
+          })}
+
+        {/* כפתור הדילר */}
+        {dealerId &&
+          s.phase !== 'waiting' &&
+          posOf.has(dealerId) &&
+          (() => {
+            const pos = posOf.get(dealerId)!;
+            const x = dealerId === myId ? 63 : lerp(pos.x, 50, 0.16) + (pos.x < 50 ? 9 : -9);
+            const y = dealerId === myId ? 86 : lerp(pos.y, 50, 0.16) + (pos.y < 50 ? 6 : -6);
+            return (
+              <div className="dealer-btn floating" style={{ left: `${x}%`, top: `${y}%` }}>
+                D
+              </div>
+            );
+          })()}
+
+        {/* ז׳טונים שעפים למנצח */}
+        {showdown &&
+          s.winners.map((w) => {
+            const pos = posOf.get(w.id) ?? ME_POS;
+            return Array.from({ length: 7 }).map((_, i) => (
+              <span
+                key={`${s.handNo}-${w.id}-${i}`}
+                className="fly-chip"
+                style={{ '--tx': `${pos.x}%`, '--ty': `${pos.y}%`, '--d': `${i * 70}ms` } as CSSProperties}
+              />
+            ));
+          })}
       </div>
 
       {me && (
-        <div className={`me-area ${myTurn ? 'my-turn' : ''} ${me.folded ? 'dim' : ''} ${winnerIds.has(myId) ? 'winner' : ''}`}>
+        <div data-pid={myId} className={`me-area ${myTurn ? 'my-turn' : ''} ${me.folded ? 'dim' : ''} ${winnerIds.has(myId) ? 'winner' : ''}`}>
           <div className="me-row">
             <div className="me-cards">
               {hole.length === 2 ? (
-                <Hand cards={hole} size="lg" />
+                <Hand cards={hole} size="lg" stagger />
               ) : (
                 <div className="me-idle">{me.sitOut ? tr('ישבת בצד 💤', 'Sitting out 💤') : tr('מחכה ליד הבאה', 'Waiting for the next hand')}</div>
               )}
@@ -130,13 +242,19 @@ export function HoldemView({
             <div className="me-info">
               <div className="my-chips">
                 {me.avatar} <b>{fmt(me.chips)}</b>
-                {s.players[s.dealerIdx]?.id === myId && <span className="dealer-btn">D</span>}
               </div>
-              {me.bet > 0 && <div className="bet-badge">🪙 {fmt(me.bet)}</div>}
               {me.lastAction && <div className="last-action">{actionLabel(me.lastAction, lang)}</div>}
               {myMade && <div className="made">{myMade}</div>}
             </div>
           </div>
+          {me.sitOut && (
+            <AsyncButton className="btn primary block" onClick={() => act({ type: 'sitOut', value: false })}>
+              {tr('▶ אני חוזר למשחק!', "▶ I'm back in!")}
+            </AsyncButton>
+          )}
+          {!me.sitOut && (me.strikes ?? 0) > 0 && (me.strikes ?? 0) < MAX_STRIKES && (
+            <div className="strike-warn">{tr('⚠️ פספסת תור - עוד פעם אחת ותושב בצד', '⚠️ You missed a turn - one more and you sit out')}</div>
+          )}
         </div>
       )}
 
@@ -149,7 +267,7 @@ export function HoldemView({
               {readyPlayers < 2 ? tr('צריך לפחות 2 שחקנים (אפשר להוסיף בוט ☰)', 'Need at least 2 players (add a bot in ☰)') : tr('▶ התחל יד', '▶ Start hand')}
             </AsyncButton>
           ) : (
-            <div className="waiting">{tr('מחכים שהמארח יתחיל ⏳', 'Waiting for the host to start ⏳')}</div>
+            me && <div className="waiting">{tr('מחכים שהמארח יתחיל ⏳', 'Waiting for the host to start ⏳')}</div>
           ))}
 
         {me && me.chips === 0 && !me.inHand && (
@@ -158,7 +276,7 @@ export function HoldemView({
           </button>
         )}
 
-        {s.phase !== 'waiting' && s.phase !== 'showdown' && !myTurn && (
+        {s.phase !== 'waiting' && !showdown && !myTurn && me && (
           <div className="turn-row">
             <span>
               {tr('תור של', 'Turn:')} {turnPlayer?.avatar} {turnPlayer && displayName(turnPlayer, lang)}
@@ -169,11 +287,12 @@ export function HoldemView({
 
         {myTurn && me && (
           <>
+            {hole.length === 2 && <Coach roomId={roomId} premium={premium} contextKey={`${s.handNo}-${s.board.length}-${s.currentBet}`} />}
             <div className="turn-row">
               <span>
                 {tr('התור שלך!', 'Your turn!')} {toCall > 0 && tr(`(להשוות ${fmt(toCall)})`, `(${fmt(toCall)} to call)`)}
               </span>
-              <Timer deadline={s.turnDeadline} roomId={roomId} />
+              <Timer deadline={s.turnDeadline} roomId={roomId} mine />
             </div>
             {raiseOpen ? (
               <div className="raise-panel">
@@ -239,7 +358,12 @@ export function HoldemView({
           </>
         )}
 
-        {s.phase === 'showdown' && (
+        {showdown && me && hole.length === 2 && !me.shown && (
+          <AsyncButton className="btn ghost block" onClick={() => act({ type: 'show' })}>
+            {tr('👀 הראה את הקלפים שלי', '👀 Show my cards')}
+          </AsyncButton>
+        )}
+        {showdown && me && (
           <AsyncButton className="btn primary block" onClick={() => act({ type: 'next' })}>
             {tr('יד הבאה ▶', 'Next hand ▶')}
           </AsyncButton>
@@ -249,26 +373,134 @@ export function HoldemView({
   );
 }
 
-function HSeat({ p, s, isTurn, isWinner, lang }: { p: HPlayer; s: HState; isTurn: boolean; isWinner: boolean; lang: Lang }) {
-  const isDealer = s.players[s.dealerIdx]?.id === p.id;
+// טבעת זמן סביב השחקן שבתור
+function TurnRing({ deadline, total }: { deadline: number; total: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(t);
+  }, []);
+  const frac = Math.max(0, Math.min(1, (deadline - now) / total));
+  return <div className={`turn-ring ${frac < 0.25 ? 'urgent' : ''}`} style={{ '--p': frac } as CSSProperties} />;
+}
+
+function Seat({
+  p,
+  pos,
+  isTurn,
+  isWinner,
+  isDealer,
+  deadline,
+  total,
+  lang,
+  onTap,
+}: {
+  p: HPlayer;
+  pos: { x: number; y: number };
+  isTurn: boolean;
+  isWinner: boolean;
+  isDealer: boolean;
+  deadline: number | null;
+  total: number;
+  lang: Lang;
+  onTap: () => void;
+}) {
+  const out = p.folded || !p.inHand;
   return (
-    <div className={`seat ${isTurn ? 'turn' : ''} ${p.folded || !p.inHand ? 'dim' : ''} ${isWinner ? 'winner' : ''}`}>
-      <div className="seat-head">
-        <span className="avatar">{p.avatar}</span>
-        <span className="seat-name">{displayName(p, lang)}</span>
-        {isDealer && <span className="dealer-btn sm">D</span>}
+    <div
+      className={`pseat ${isDealer ? 'is-dealer' : ''} ${isTurn ? 'turn' : ''} ${out ? 'out' : ''} ${isWinner ? 'winner' : ''} ${pos.y < 50 ? 'top' : 'bottom'}`}
+      style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
+      data-pid={p.id}
+      onClick={onTap}
+      role="button"
+      aria-label={displayName(p, lang)}
+    >
+      <div className={`pseat-cards ${p.shown ? 'shown' : ''}`}>
+        {p.shown ? <Hand cards={p.shown} size="sm" /> : p.inHand && !p.folded ? <Hand cards={[]} hiddenCount={2} size="xs" /> : null}
       </div>
-      <div className="seat-chips">{p.allIn ? (lang === 'he' ? 'אול-אין!' : 'All-in!') : fmt(p.chips)}</div>
-      <div className="seat-cards">
-        {p.shown ? <Hand cards={p.shown} size="sm" /> : p.inHand && !p.folded ? <Hand cards={[]} hiddenCount={2} size="sm" /> : null}
+      <div className="pseat-avatar">
+        {isTurn && deadline && <TurnRing deadline={deadline} total={total} />}
+        <span>{p.avatar}</span>
+        {p.sitOut && <span className="sit-out-badge">💤</span>}
       </div>
-      {(p.bet > 0 || p.lastAction) && (
-        <div className="seat-action">
-          {p.bet > 0 && <span className="bet-badge sm">🪙{fmt(p.bet)}</span>}
-          {p.lastAction && <span className="last-action sm">{actionLabel(p.lastAction, lang)}</span>}
+      <div className="pseat-plate">
+        <div className="pseat-name" dir="auto">
+          {displayName(p, lang)}
         </div>
-      )}
-      {p.sitOut && <div className="seat-status">💤</div>}
+        <div className="pseat-chips">{p.allIn ? (lang === 'he' ? 'אול-אין' : 'ALL-IN') : fmt(p.chips)}</div>
+      </div>
+      {p.lastAction && !p.allIn && !p.shown && <div className="pseat-action">{actionLabel(p.lastAction, lang)}</div>}
     </div>
+  );
+}
+
+// קופות ברורות: קופה ראשית + צדדיות, ובסוף היד - מי לקח כל קופה
+function PotsDisplay({ s, pot, lang }: { s: HState; pot: number; lang: Lang }) {
+  const he = lang === 'he';
+  const nameOf = (id: string) => {
+    const p = s.players.find((x) => x.id === id);
+    return p ? `${p.avatar} ${displayName(p, lang)}` : '?';
+  };
+  if (s.phase === 'showdown' && (s.potResults?.length ?? 0) > 1) {
+    return (
+      <div className="pots">
+        {s.potResults!.map((r, i) => (
+          <div key={i} className={`pot-chip ${i === 0 ? 'main' : 'side'}`}>
+            <span className="chip-stack" />
+            <span>
+              {i === 0 ? (he ? 'ראשית' : 'Main') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(r.amount)}</b>
+            </span>
+            <span className="pot-winner">→ {r.winners.map(nameOf).join(', ')}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  const running = s.phase !== 'waiting' && s.phase !== 'showdown';
+  const someoneAllIn = s.players.some((p) => p.inHand && !p.folded && p.allIn);
+  const pots = running && someoneAllIn ? computePots(s).filter((p) => p.eligible.length > 1) : [];
+  if (pots.length > 1) {
+    return (
+      <div className="pots">
+        {pots.map((p, i) => (
+          <div key={i} className={`pot-chip ${i === 0 ? 'main' : 'side'}`}>
+            <span className="chip-stack" />
+            <span>
+              {i === 0 ? (he ? 'קופה ראשית' : 'Main pot') : he ? `צדדית ${i}` : `Side ${i}`} <b>{fmt(p.amount)}</b>
+            </span>
+            <span className="pot-elig">
+              {p.eligible.length} {he ? 'שחקנים' : 'players'}
+            </span>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="pot-pill" key={pot}>
+      <span className="chip-stack" />
+      {he ? 'קופה' : 'Pot'} <b>{fmt(pot)}</b>
+    </div>
+  );
+}
+
+// בליינדים נוכחיים + כמה זמן עד שהם עולים
+function BlindsClock({ s, lang }: { s: HState; lang: Lang }) {
+  const [now, setNow] = useState(Date.now());
+  const mins = s.settings.blindUpMinutes ?? 0;
+  useEffect(() => {
+    if (!mins) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [mins]);
+  const label = `${s.settings.sb}/${s.settings.bb}`;
+  if (!mins || s.levelStartedAt == null) return <span className="blinds-tag">{label}</span>;
+  const left = Math.max(0, s.levelStartedAt + mins * 60000 - now);
+  const mm = Math.floor(left / 60000);
+  const ss = Math.floor((left % 60000) / 1000);
+  return (
+    <span className={`blinds-tag up ${left < 60000 ? 'soon' : ''}`} title={lang === 'he' ? 'בליינדים עולים בעוד' : 'Blinds up in'}>
+      {label} · ⬆ {mm}:{String(ss).padStart(2, '0')}
+    </span>
   );
 }

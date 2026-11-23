@@ -1,0 +1,83 @@
+// שכבת אפקטים מעל השולחן: חפצים שעפים בין שחקנים, אימוג׳י מעל הראש ובועות צ׳אט
+// המיקום נלקח מהמסך עצמו (כל מושב מסומן ב-data-pid)
+import { useEffect, useState, type CSSProperties } from 'react';
+import type { FxEvent } from '../lib/fx';
+import type { ChatMsg } from '../engine/room';
+
+function centerOf(pid: string): { x: number; y: number } | null {
+  const el = document.querySelector(`[data-pid="${CSS.escape(pid)}"]`);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 40) };
+}
+
+const SPLAT: Record<string, string> = { '🍅': '💥', '🥚': '🍳', '🍺': '💦', '💩': '💨', '🎂': '🎉', '💸': '🤑', '🔥': '🔥', '🌹': '💕', '💋': '💗', '🧻': '😷' };
+
+export function FxLayer({ events, chatBubble }: { events: FxEvent[]; chatBubble: ChatMsg | null }) {
+  // מזיזים מושב שזירזו אותו
+  useEffect(() => {
+    for (const e of events) {
+      if (e.kind !== 'nudge') continue;
+      const el = document.querySelector(`[data-pid="${CSS.escape(e.to)}"]`);
+      if (!el) continue;
+      el.classList.remove('shake');
+      void (el as HTMLElement).offsetWidth;
+      el.classList.add('shake');
+    }
+  }, [events]);
+
+  return (
+    <div className="fx-layer" aria-hidden="true">
+      {events.map((e) => {
+        if (e.kind === 'throw') {
+          const a = centerOf(e.from);
+          const b = centerOf(e.to);
+          if (!a || !b) return null;
+          const style = { '--x0': `${a.x}px`, '--y0': `${a.y}px`, '--x1': `${b.x}px`, '--y1': `${b.y}px` } as CSSProperties;
+          return (
+            <span key={e.id}>
+              <span className="fx-throw" style={style}>
+                {e.item}
+              </span>
+              <span className="fx-splat" style={{ left: b.x, top: b.y }}>
+                {SPLAT[e.item] ?? '💥'}
+              </span>
+            </span>
+          );
+        }
+        if (e.kind === 'emote') {
+          const a = centerOf(e.from);
+          if (!a) return null;
+          return (
+            <span key={e.id} className="fx-emote" style={{ left: a.x, top: a.y }}>
+              {e.emoji}
+            </span>
+          );
+        }
+        if (e.kind === 'nudge') {
+          const b = centerOf(e.to);
+          if (!b) return null;
+          return (
+            <span key={e.id} className="fx-emote nudge" style={{ left: b.x, top: b.y }}>
+              ⏰
+            </span>
+          );
+        }
+        return null;
+      })}
+      {chatBubble && <ChatBubble msg={chatBubble} />}
+    </div>
+  );
+}
+
+// בועת צ׳אט מעל מי שכתב
+function ChatBubble({ msg }: { msg: ChatMsg }) {
+  const [pos, setPos] = useState(() => centerOf(msg.id));
+  useEffect(() => setPos(centerOf(msg.id)), [msg]);
+  if (!pos) return null;
+  return (
+    <span className="fx-chat" style={{ left: Math.min(Math.max(pos.x, 90), window.innerWidth - 90), top: pos.y - 34 }} dir="auto">
+      {msg.text}
+    </span>
+  );
+}

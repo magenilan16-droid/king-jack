@@ -92,6 +92,23 @@ const ERRORS: Record<string, string> = {
   'השם הזה תפוס': 'This name is taken',
   'צריך לשבת בשולחן כדי להזמין': 'You need to sit at the table to invite',
   'לא נבחרו חברים': 'No friends selected',
+  'רק מנהל': 'Admins only',
+  'אפשר לקנות שוב רק כשנגמרים הז׳טונים': 'You can rebuy only when you run out of chips',
+  'נגמרו הקניות החוזרות בשולחן הזה': 'No rebuys left at this table',
+  'אפשר להראות קלפים רק בסוף היד': 'You can show cards only after the hand',
+  'אין קלפים להראות': 'No cards to show',
+  'אפשר לזרז רק מי שבתור': 'You can only nudge the player whose turn it is',
+  'רגע, כבר זירזו אותו/ה 😅': 'Easy, they were just nudged 😅',
+  'המאמן זמין רק למנויי פרימיום ⭐': 'The coach is for premium members only ⭐',
+  'המאמן עוד לא הופעל - חסר מפתח API': 'The coach is not set up yet - missing API key',
+  'רגע, המאמן עוד חושב על השאלה הקודמת 🤔': 'One moment, the coach is still thinking 🤔',
+  'הגעתם למכסה היומית של המאמן': "You've reached the coach's daily limit",
+  'אין לך קלפים ביד הזאת': "You don't have cards in this hand",
+  'המאמן עמוס כרגע - נסו שוב בעוד רגע': 'The coach is busy - try again in a moment',
+  'מפתח ה-API של המאמן לא תקין': "The coach's API key is invalid",
+  'אין חיבור לשרת המאמן - נסו שוב': "Can't reach the coach - try again",
+  'המאמן נתקל בשגיאה - נסו שוב': 'The coach hit an error - try again',
+  'אי אפשר להסיר את עצמך מניהול': "You can't remove yourself as admin",
 };
 
 export function translateError(msg: string): string {

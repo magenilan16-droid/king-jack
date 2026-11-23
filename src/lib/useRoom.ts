@@ -31,6 +31,7 @@ export function useRoom(roomId: string, myId: string) {
   const [room, setRoom] = useState<RoomRow | null>(null);
   const [hole, setHole] = useState<Card[]>([]);
   const [ledger, setLedger] = useState<LedgerRow[]>([]);
+  const [connected, setConnected] = useState(true);
 
   const refresh = useCallback(async () => {
     const [r, p, l] = await Promise.all([
@@ -59,18 +60,43 @@ export function useRoom(roomId: string, myId: string) {
         setLedger((old) => (old.some((x) => x.id === (pl.new as LedgerRow).id) ? old : [...old, pl.new as LedgerRow]));
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') refresh();
+        if (status === 'SUBSCRIBED') {
+          setConnected(true);
+          refresh();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setConnected(false);
       });
+    const onOnline = () => {
+      setConnected(true);
+      refresh();
+    };
+    const onOffline = () => setConnected(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    // נוכחות: מודיעים לשרת שאני מסתכל על השולחן (כדי לא לקבל התראת "התור שלך" סתם)
+    const beat = () => {
+      if (document.visibilityState === 'visible') supabase.rpc('game_heartbeat', { p_room: roomId }).then(() => {});
+    };
+    beat();
+    const hb = setInterval(beat, 15000);
     // גיבוי - רענון כל 8 שניות למקרה שהחיבור נפל
     const t = setInterval(refresh, 8000);
-    const onVis = () => document.visibilityState === 'visible' && refresh();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+        beat();
+      } else supabase.rpc('game_heartbeat', { p_room: null }).then(() => {});
+    };
     document.addEventListener('visibilitychange', onVis);
     return () => {
       clearInterval(t);
+      clearInterval(hb);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      supabase.rpc('game_heartbeat', { p_room: null }).then(() => {});
       document.removeEventListener('visibilitychange', onVis);
       supabase.removeChannel(ch);
     };
   }, [roomId, myId, refresh]);
 
-  return { room, hole, ledger, refresh };
+  return { room, hole, ledger, refresh, connected };
 }

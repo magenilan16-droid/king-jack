@@ -1,0 +1,602 @@
+/* King Jack - שולחן אובלי, קלפים משודרגים, אנימציות ומסכים חדשים */
+
+html,
+body,
+#root,
+button,
+input,
+select {
+  font-family: 'Rubik', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+}
+
+/* ---------- קלפים ---------- */
+.card {
+  animation: flipIn 0.38s ease-out both;
+  backface-visibility: hidden;
+  background: linear-gradient(160deg, #ffffff 0%, #f3f4f6 70%, #e6e8eb 100%);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+@keyframes flipIn {
+  from {
+    transform: perspective(400px) rotateY(85deg) translateY(-8px);
+    opacity: 0.2;
+  }
+}
+.card .idx {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 0.92;
+  font-weight: 800;
+}
+.card .idx b {
+  font-size: 14px;
+  letter-spacing: -0.5px;
+}
+.card .idx i {
+  font-style: normal;
+  font-size: 11px;
+}
+.card .idx.tl {
+  top: 3px;
+  left: 4px;
+}
+.card .idx.br {
+  bottom: 3px;
+  right: 4px;
+  transform: rotate(180deg);
+}
+.card .pip {
+  font-size: 22px;
+  line-height: 1;
+}
+.card .pip.face {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 900;
+  font-size: 19px;
+  padding: 1px 4px;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+}
+.card.lg .idx b {
+  font-size: 19px;
+}
+.card.lg .idx i {
+  font-size: 14px;
+}
+.card.lg .pip {
+  font-size: 34px;
+}
+.card.lg .pip.face {
+  font-size: 28px;
+}
+.card.sm {
+  width: 30px;
+  height: 42px;
+}
+.card.sm .idx.br,
+.card.sm .pip {
+  display: none;
+}
+.card.sm .idx.tl {
+  top: 3px;
+  left: 0;
+  right: 0;
+}
+.card.sm .idx b {
+  font-size: 13px;
+}
+.card.sm .idx i {
+  font-size: 13px;
+}
+.card.xs {
+  width: 20px;
+  height: 28px;
+  border-radius: 4px;
+}
+.card.back {
+  background: radial-gradient(circle at 50% 50%, #a31d33 0 30%, transparent 31%),
+    repeating-linear-gradient(45deg, #7a1022 0 5px, #8f1729 5px 10px);
+  border: 2px solid #fff;
+}
+.card .back-logo {
+  color: #f5c542;
+  font-size: 22px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.card.sm .back-logo {
+  font-size: 13px;
+}
+.card.xs .back-logo {
+  font-size: 9px;
+}
+.card.xs.back {
+  border-width: 1.5px;
+}
+
+.hand.hand-lg .card + .card {
+  margin-left: -12px;
+}
+.hand.hand-md .card + .card {
+  margin-left: -12px;
+}
+.hand.hand-sm .card + .card {
+  margin-left: -9px;
+}
+.hand.hand-xs .card + .card {
+  margin-left: -10px;
+}
+
+/* ---------- שולחן פוקר אובלי ---------- */
+.hd {
+  padding-top: 4px;
+}
+.poker-wrap {
+  position: relative;
+  width: 100%;
+  height: clamp(340px, 54vh, 480px);
+  flex-shrink: 0;
+}
+.poker-table {
+  position: absolute;
+  inset: 9% 12% 11%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 38%, color-mix(in srgb, var(--felt) 100%, white 8%) 0%, var(--felt) 45%, var(--felt2) 100%);
+  border: 11px solid #5b3b1f;
+  box-shadow:
+    0 0 0 3px #2b1a0b,
+    inset 0 0 0 2px rgba(255, 255, 255, 0.06),
+    inset 0 0 45px rgba(0, 0, 0, 0.55),
+    0 16px 40px rgba(0, 0, 0, 0.65);
+}
+.poker-table::before {
+  content: '';
+  position: absolute;
+  inset: -11px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16), transparent 40%);
+  pointer-events: none;
+}
+.poker-table::after {
+  content: '';
+  position: absolute;
+  inset: 16px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+}
+.table-brand {
+  position: absolute;
+  left: 50%;
+  top: 17%;
+  transform: translateX(-50%);
+  font-weight: 800;
+  letter-spacing: 5px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.13);
+  white-space: nowrap;
+}
+.table-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 72%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 2;
+}
+.table-center .board {
+  gap: 3px;
+}
+.table-center .card.md {
+  width: 40px;
+  height: 57px;
+}
+.table-center .card.md .pip {
+  font-size: 19px;
+}
+.table-center .card.md .idx.br {
+  display: none;
+}
+.pot-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--accent);
+  font-weight: 800;
+  font-size: 15px;
+  animation: bump 0.35s ease-out;
+}
+@keyframes bump {
+  40% {
+    transform: scale(1.14);
+  }
+}
+.table-center .winners {
+  font-size: 13px;
+  text-shadow: 0 1px 3px #000;
+}
+
+.pseat {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 76px;
+  z-index: 3;
+  transition: opacity 0.25s;
+}
+.pseat.out {
+  opacity: 0.45;
+}
+.pseat-avatar {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 32%, #444c54, #1b2024);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.55);
+}
+.pseat.turn .pseat-avatar {
+  border-color: transparent;
+}
+.pseat.winner .pseat-avatar {
+  border-color: var(--pos);
+  box-shadow: 0 0 20px rgba(61, 220, 132, 0.85);
+  animation: winnerPulse 1s ease-in-out 3;
+}
+@keyframes winnerPulse {
+  50% {
+    transform: scale(1.12);
+  }
+}
+.pseat-plate {
+  position: relative;
+  margin-top: -7px;
+  padding: 2px 7px;
+  border-radius: 9px;
+  background: rgba(8, 12, 14, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+  min-width: 62px;
+  max-width: 80px;
+}
+.pseat-name {
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pseat-chips {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.pseat-cards {
+  position: absolute;
+  top: -6px;
+  left: 54%;
+  transform: rotate(10deg);
+  z-index: 2;
+}
+.pseat-cards.shown {
+  left: 50%;
+  top: -24px;
+  transform: translateX(-50%);
+}
+.pseat-action {
+  margin-top: 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  animation: fade 0.25s;
+}
+.sit-out-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -6px;
+  font-size: 14px;
+}
+.turn-ring {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--p) * 360deg), rgba(255, 255, 255, 0.1) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+}
+.turn-ring.urgent {
+  background: conic-gradient(var(--neg) calc(var(--p) * 360deg), rgba(255, 255, 255, 0.1) 0);
+}
+
+.bet-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px 1px 2px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 11px;
+  font-weight: 800;
+  z-index: 2;
+  animation: chipIn 0.3s ease-out;
+  white-space: nowrap;
+}
+.chip-icon {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff 0 28%, #d23 30% 58%, #fff 60% 68%, #d23 70%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+@keyframes chipIn {
+  from {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+}
+.dealer-btn.floating {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+  margin: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.55);
+  transition: left 0.4s, top 0.4s;
+}
+.fly-chip {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  z-index: 6;
+  opacity: 0;
+  background: radial-gradient(circle, #ffe28a 0 28%, #c98a00 30% 58%, #ffe28a 60%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  animation: fly 0.9s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: var(--d);
+}
+@keyframes fly {
+  0% {
+    left: 50%;
+    top: 50%;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  100% {
+    left: var(--tx);
+    top: var(--ty);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.6);
+  }
+}
+
+.hd .me-area {
+  margin-top: 0;
+  padding: 10px 12px;
+}
+.strike-warn {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffcf66;
+  text-align: center;
+}
+
+/* ---------- בלאק ג׳ק ---------- */
+.felt-print {
+  width: 100%;
+  max-width: 320px;
+  height: 38px;
+  margin-bottom: -6px;
+}
+.felt-print text {
+  fill: rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.4px;
+}
+.dealer-area {
+  border-radius: 0 0 50% 50% / 0 0 30% 30%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.18));
+}
+
+/* ---------- ניתוק, צפייה ---------- */
+.offline-banner {
+  background: #8b2a38;
+  color: #fff;
+  text-align: center;
+  padding: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  animation: fade 0.3s;
+}
+.spectator-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px calc(10px + var(--safe-b));
+  background: rgba(0, 0, 0, 0.85);
+  border-top: 1px solid var(--line);
+  font-weight: 700;
+}
+
+/* ---------- חובות וניהול ---------- */
+.debt-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.debt-summary > div {
+  padding: 14px 8px;
+  border-radius: 14px;
+  background: var(--panel);
+  text-align: center;
+}
+.debt-row,
+.admin-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--panel);
+}
+.debt-row.paid {
+  opacity: 0.6;
+}
+.debt-who {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-weight: 700;
+  font-size: 14px;
+}
+.debt-who .arrow {
+  color: var(--muted);
+}
+.debt-amount {
+  color: var(--accent);
+  font-size: 16px;
+  white-space: nowrap;
+}
+.admin-row .btn.small {
+  min-width: 42px;
+  padding: 6px 8px;
+}
+.danger-text {
+  color: var(--neg) !important;
+}
+
+/* מסכים נמוכים (אייפון SE וכו׳) */
+@media (max-height: 700px) {
+  .quip-ribbon {
+    display: none;
+  }
+  .poker-wrap {
+    height: 320px;
+  }
+  .card.lg {
+    width: 54px;
+    height: 76px;
+  }
+}
+
+/* כותרת הלובי - לא לשבור שורה */
+.lobby .brand {
+  white-space: nowrap;
+  font-size: 15px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lobby .me-chip {
+  max-width: 34%;
+}
+@media (max-width: 380px) {
+  .lobby .brand {
+    display: none;
+  }
+}
+
+/* שחקנים בחצי העליון: הקלפים שנחשפים מופיעים לכיוון מרכז השולחן */
+.pseat.top .pseat-cards.shown {
+  top: auto;
+  bottom: -46px;
+}
+
+.felt-print {
+  height: 50px;
+  max-width: 300px;
+}
+.felt-print text {
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+.felt-print .sub-print {
+  font-size: 8px;
+  letter-spacing: 2.5px;
+  fill: rgba(255, 255, 255, 0.16);
+}
+
+/* ---------- מאמן AI ---------- */
+.coach {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.coach-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.35), rgba(0, 200, 255, 0.22));
+  border: 1px solid rgba(160, 140, 255, 0.55);
+  font-weight: 700;
+  font-size: 15px;
+}
+.coach-btn.locked {
+  opacity: 0.75;
+}
+.coach-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(124, 92, 255, 0.28), rgba(0, 0, 0, 0.45));
+  border: 1px solid rgba(160, 140, 255, 0.55);
+  font-size: 14.5px;
+  line-height: 1.5;
+  animation: fade 0.3s;
+}
+.coach-bubble b {
+  color: var(--accent);
+}
+.coach-avatar {
+  font-size: 22px;
+}
+.icon-btn.small {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+.action-bar .coach-btn {
+  min-height: 36px;
+  font-size: 14px;
+  padding: 6px 12px;
+}
+.action-bar .coach-bubble {
+  max-height: 30vh;
+  overflow-y: auto;
+}

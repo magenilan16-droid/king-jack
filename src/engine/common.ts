@@ -25,6 +25,15 @@ export function fail(msg: string): never {
 
 export const TURN_SECONDS = 45;
 
+// זמן תור (מילישניות) לפי הגדרת השולחן, ברירת מחדל 45 שניות
+export function turnMs(settings: unknown): number {
+  const t = Number((settings as { turnSeconds?: number })?.turnSeconds);
+  return (Number.isFinite(t) && t >= 15 && t <= 180 ? t : TURN_SECONDS) * 1000;
+}
+
+// אחרי כמה פספוסי תור ברצף מושיבים את השחקן בצד
+export const MAX_STRIKES = 2;
+
 export const BOT_NAMES = ['רובוט רפי', 'בוטי', 'צ׳יפי', 'ד״ר קלף', 'מקס', 'לולו', 'ג׳וני', 'בינה'];
 export const BOT_AVATARS = ['🤖', '👾', '🦾', '🧠', '🎰', '🦊', '🐙', '🦉'];
 

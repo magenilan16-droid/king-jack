@@ -1,11 +1,19 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import '@fontsource/rubik/400.css'
+import '@fontsource/rubik/500.css'
+import '@fontsource/rubik/700.css'
+import '@fontsource/rubik/800.css'
 import './index.css'
+import './table.css'
+import './premium.css'
 import App from './App.tsx'
 import { initInstallCapture } from './lib/platform'
 import { registerSW } from './lib/push'
+import { unlockAudio } from './lib/sound'
 
 initInstallCapture()
+unlockAudio()
 registerSW()
 
 createRoot(document.getElementById('root')!).render(

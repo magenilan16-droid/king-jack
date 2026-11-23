@@ -26,6 +26,7 @@ if (bestHand('Ah Kd 3c 4s 5h 9d 2c'.split(' ')).score <= bestHand('Kh Qd Jc 9s 8
   const f = full as HFull;
   let bought = effects.reduce((a, e) => a + e.amount, 0);
   let cashed = 0;
+  let sidePots = 0;
   bought += joinGame(f, human('h2'), 1000).reduce((a, e) => a + e.amount, 0);
   for (let i = 0; i < 4; i++) bought += act(f, 'h1', { type: 'addBot' }, now).effects.reduce((a, e) => a + e.amount, 0);
   act(f, 'h1', { type: 'start' }, now);
@@ -43,6 +44,14 @@ if (bestHand('Ah Kd 3c 4s 5h 9d 2c'.split(' ')).score <= bestHand('Kh Qd Jc 9s 8
         toCall > 0 ? { type: 'call' as const } : { type: 'check' as const };
       act(f, id, mv, now);
     }
+    // היסטוריה ופוטים: סכום הקופות = הקופה, ורווח השחקנים ביד מתאפס
+    const lh = f.pub.lastHand;
+    if (!lh || lh.no !== f.pub.handNo) throw new Error('missing hand record ' + f.pub.handNo);
+    const potsSum = lh.pots.reduce((a, p) => a + p.amount, 0);
+    if (potsSum !== lh.pot) throw new Error('pots mismatch ' + potsSum + ' vs ' + lh.pot);
+    const netSum = lh.players.reduce((a, p) => a + p.net, 0);
+    if (netSum !== 0) throw new Error('hand net not zero: ' + netSum + ' hand ' + lh.no);
+    if (lh.pots.length > 1) sidePots++;
     // שימור ז׳טונים
     const onTable = f.pub.players.reduce((a, p) => a + p.chips + p.pending, 0);
     if (onTable + cashed !== bought) throw new Error(`holdem chips mismatch hand ${hand}: ${onTable + cashed} vs ${bought}`);
@@ -57,7 +66,7 @@ if (bestHand('Ah Kd 3c 4s 5h 9d 2c'.split(' ')).score <= bestHand('Kh Qd Jc 9s 8
     bought += res.effects.filter((e) => e.kind === 'buyin').reduce((a, e) => a + e.amount, 0);
     void before;
   }
-  console.log('holdem OK, hands:', f.pub.handNo);
+  console.log('holdem OK, hands:', f.pub.handNo, 'hands with side pots:', sidePots);
 }
 
 // ---- בלאק ג׳ק ----
@@ -104,3 +113,23 @@ console.log(settle([
   { id: 'd', name: 'D', net: 30 },
 ]));
 now++;
+
+// ---- בליינדים עולים ----
+{
+  const { full } = createGame('holdem', human('b1'), { sb: 1, bb: 2, buyIn: 500, blindUpMinutes: 10 } as never);
+  const f = full as HFull;
+  joinGame(f, human('b2'));
+  let t = 1_000_000;
+  act(f, 'b1', { type: 'start' }, t);
+  const seen: string[] = [];
+  for (let k = 0; k < 6; k++) {
+    // משחקים יד עד הסוף בפולד, ומתקדמים 10 דקות
+    while (f.pub.phase !== 'showdown') act(f, f.pub.turnId!, { type: 'fold' }, t);
+    seen.push(`${f.pub.settings.sb}/${f.pub.settings.bb}`);
+    t += 10 * 60000;
+    act(f, 'b1', { type: 'next' }, t);
+  }
+  console.log('blind levels:', seen.join(' -> '));
+  // קנייה חוזרת אסורה כשיש ז׳טונים
+  try { act(f, 'b1', { type: 'rebuy', amount: 99999 }, t); console.log('ERROR: rebuy allowed with chips'); } catch { console.log('rebuy blocked while holding chips ✔'); }
+}

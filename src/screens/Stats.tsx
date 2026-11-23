@@ -5,6 +5,7 @@ import { fmt } from '../lib/balances';
 import { useI18n } from '../lib/i18n';
 import { Sheet } from '../components/ui';
 import { Settle } from '../components/Settle';
+import { HandHistory } from '../components/HandHistory';
 import type { LedgerRow, RoomRow } from '../lib/useRoom';
 
 interface LeaderRow {
@@ -83,7 +84,7 @@ export function Stats({ profile, onBack }: { profile: Profile; onBack: () => voi
   const myRank = board ? board.findIndex((b) => b.user_id === profile.id) : -1;
 
   return (
-    <div className="screen">
+    <div className="screen has-nav">
       <header className="topbar">
         <button className="icon-btn" onClick={onBack}>
           {lang === 'he' ? '➜' : '⬅'}
@@ -205,6 +206,12 @@ export function Stats({ profile, onBack }: { profile: Profile; onBack: () => voi
 
       <Sheet open={!!openNight} onClose={() => setOpenNight(null)} title={openNight ? `📊 ${openNight.room.name}` : ''}>
         {openNight && <Settle room={openNight.room} ledger={openNight.ledger} moneyMode={openNight.room.money_mode} />}
+        {openNight && (
+          <>
+            <h3 className="section-title">{tr('📜 היסטוריית ידיים', '📜 Hand history')}</h3>
+            <HandHistory roomId={openNight.room.id} myId={profile.id} />
+          </>
+        )}
       </Sheet>
     </div>
   );

@@ -10,8 +10,12 @@ import { Lobby } from './screens/Lobby';
 import { Table } from './screens/Table';
 import { Stats } from './screens/Stats';
 import { Install } from './screens/Install';
+import { Debts } from './screens/Debts';
+import { Admin } from './screens/Admin';
+import { ProfileScreen } from './screens/Profile';
+import { BottomNav, type Tab } from './components/BottomNav';
 
-type Route = { name: 'lobby' } | { name: 'table'; roomId: string } | { name: 'stats' } | { name: 'install' };
+type Route = { name: 'lobby' } | { name: 'table'; roomId: string } | { name: 'stats' } | { name: 'install' } | { name: 'debts' } | { name: 'admin' } | { name: 'profile' };
 
 interface Invite {
   id: number;
@@ -23,19 +27,23 @@ interface Invite {
   code: string;
 }
 
-function readJoinParam(url: string): string | null {
+function readParam(url: string, key: string): string | null {
   try {
-    return new URL(url).searchParams.get('join');
+    return new URL(url).searchParams.get(key);
   } catch {
     return null;
   }
 }
+const readJoinParam = (url: string) => readParam(url, 'join');
 
 export default function App() {
-  const { tr } = useI18n();
+  const { tr, lang } = useI18n();
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [route, setRoute] = useState<Route>({ name: 'lobby' });
+  const [route, setRoute] = useState<Route>(() => {
+    const room = readParam(location.href, 'room');
+    return room ? { name: 'table', roomId: room } : { name: 'lobby' };
+  });
   const [pendingJoin, setPendingJoin] = useState<string | null>(() => readJoinParam(location.href));
   const [invite, setInvite] = useState<Invite | null>(null);
   const { theme, setTheme } = useThemePref();
@@ -43,7 +51,7 @@ export default function App() {
 
   // מנקים את ?join מהכתובת אחרי שקראנו אותו
   useEffect(() => {
-    if (readJoinParam(location.href)) history.replaceState(null, '', location.pathname);
+    if (readJoinParam(location.href) || readParam(location.href, 'room')) history.replaceState(null, '', location.pathname);
   }, []);
 
   // התחברות
@@ -63,13 +71,20 @@ export default function App() {
     if (session?.user) refreshPushIfGranted();
   }, [session?.user, loadProfile]);
 
+  // השרת צריך לדעת באיזו שפה לשלוח התראות
+  useEffect(() => {
+    if (session?.user) supabase.rpc('game_set_lang', { p_lang: lang }).then(() => {});
+  }, [session?.user, lang]);
+
   // לחיצה על התראה כשהאפליקציה כבר פתוחה
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     const onMsg = (e: MessageEvent) => {
       if (e.data?.type === 'open-url') {
         const code = readJoinParam(e.data.url);
-        if (code) {
+        const room = readParam(e.data.url, 'room');
+        if (room) setRoute({ name: 'table', roomId: room });
+        else if (code) {
           setPendingJoin(code);
           setRoute({ name: 'lobby' });
         }
@@ -122,6 +137,27 @@ export default function App() {
     };
   }, [session?.user?.id, showInvite]);
 
+  const [debtCount, setDebtCount] = useState(0);
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    const load = () =>
+      supabase
+        .from('game_debts')
+        .select('id', { count: 'exact', head: true })
+        .eq('paid', false)
+        .or('from_user.eq.' + uid + ',to_user.eq.' + uid)
+        .then(({ count }) => setDebtCount(count ?? 0));
+    load();
+    const ch = supabase
+      .channel('my-debts-' + uid)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'game_debts' }, () => load())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
+    };
+  }, [session?.user?.id]);
+
   const markSeen = async (id: number) => {
     await supabase.from('game_invites').update({ seen: true }).eq('id', id);
   };
@@ -160,27 +196,42 @@ export default function App() {
     );
   } else if (route.name === 'stats') {
     screen = <Stats profile={profile} onBack={() => setRoute({ name: 'lobby' })} />;
-  } else {
+  } else if (route.name === 'debts') {
+    screen = <Debts profile={profile} onBack={() => setRoute({ name: 'lobby' })} />;
+  } else if (route.name === 'admin' && profile.is_admin) {
+    screen = <Admin profile={profile} onBack={() => setRoute({ name: 'profile' })} />;
+  } else if (route.name === 'profile') {
     screen = (
-      <Lobby
+      <ProfileScreen
         profile={profile}
         theme={theme}
         setTheme={setTheme}
         tipsOn={tipsOn}
         setTipsOn={setTipsOn}
-        openTable={(roomId) => setRoute({ name: 'table', roomId })}
-        onStats={() => setRoute({ name: 'stats' })}
         onInstall={() => setRoute({ name: 'install' })}
-        pendingJoin={pendingJoin}
-        clearPendingJoin={() => setPendingJoin(null)}
+        onAdmin={() => setRoute({ name: 'admin' })}
         onProfileChange={loadProfile}
       />
     );
+  } else {
+    screen = (
+      <Lobby
+        profile={profile}
+        openTable={(roomId) => setRoute({ name: 'table', roomId })}
+        onDebts={() => setRoute({ name: 'debts' })}
+        onInstall={() => setRoute({ name: 'install' })}
+        pendingJoin={pendingJoin}
+        clearPendingJoin={() => setPendingJoin(null)}
+      />
+    );
   }
+  const tabRoutes = ['lobby', 'stats', 'debts', 'profile'];
+  const showNav = !!session && !!profile && tabRoutes.includes(route.name);
 
   return (
     <>
       {screen}
+      {showNav && <BottomNav tab={route.name as Tab} onTab={(t) => setRoute({ name: t } as Route)} debtBadge={debtCount} />}
       <Sheet open={!!invite} onClose={() => invite && (markSeen(invite.id), setInvite(null))} title={tr('🔔 הזמנה למשחק!', '🔔 Game invite!')}>
         {invite && (
           <div className="invite-pop">

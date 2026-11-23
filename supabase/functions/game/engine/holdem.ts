@@ -2,7 +2,7 @@
 import { type Card, newDeck, shuffle } from './cards.ts';
 import { bestHand, HAND_NAMES } from './handEval.ts';
 import { equity } from './equity.ts';
-import { type PlayerBase, type LedgerEffect, fail, TURN_SECONDS, cashoutEffects } from './common.ts';
+import { type PlayerBase, type LedgerEffect, fail, turnMs, MAX_STRIKES, cashoutEffects } from './common.ts';
 
 export interface HPlayer extends PlayerBase {
   inHand: boolean;
@@ -14,6 +14,8 @@ export interface HPlayer extends PlayerBase {
   sitOut: boolean;
   leaving?: boolean;
   pending: number; // קנייה שתיכנס ביד הבאה
+  strikes?: number; // כמה פעמים ברצף נגמר לו הזמן
+  startChips?: number; // כמה היו לו בתחילת היד (לחישוב רווח ביד)
   shown: Card[] | null;
   lastAction: string | null; // קוד: fold / check / call:N / raise:N / allin / sb:N / bb:N / left
 }
@@ -22,6 +24,10 @@ export interface HSettings {
   sb: number;
   bb: number;
   buyIn: number;
+  turnSeconds?: number;
+  blindUpMinutes?: number; // 0 = בליינדים קבועים
+  baseBb?: number; // הביג בליינד ההתחלתי
+  maxRebuys?: number | null; // null = ללא הגבלה
 }
 
 export interface HWinner {
@@ -29,7 +35,48 @@ export interface HWinner {
   name: string;
   amount: number;
   cat: number; // סוג היד (0-8), -1 = כולם קיפלו
+  best?: Card[]; // 5 הקלפים הטובים
 }
+
+// קופה (ראשית או צדדית) ומי זכה בה
+export interface PotResult {
+  amount: number;
+  eligible: string[];
+  winners: string[];
+}
+
+export interface HandLogEntry {
+  st: string; // שלב: preflop / flop / turn / river
+  id: string;
+  a: string; // קוד פעולה
+}
+
+// רשומת היסטוריה של יד שהסתיימה
+export interface HoldemHandRecord {
+  kind: 'holdem';
+  no: number;
+  board: Card[];
+  pot: number;
+  blinds: [number, number];
+  reason: 'fold' | 'showdown';
+  players: {
+    id: string;
+    name: string;
+    avatar: string;
+    isBot: boolean;
+    net: number;
+    folded: boolean;
+    shown: Card[] | null;
+    cat?: number;
+    best?: Card[];
+  }[];
+  winners: HWinner[];
+  pots: PotResult[];
+  log: HandLogEntry[];
+}
+
+// מכפילי בליינדים לפי שלב
+export const BLIND_MULT = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128];
 
 export type HPhase = 'waiting' | 'preflop' | 'flop' | 'turn' | 'river' | 'showdown';
 
@@ -48,6 +95,12 @@ export interface HState {
   settings: HSettings;
   hostId: string;
   log: string[];
+  handLog?: HandLogEntry[];
+  lastHand?: HoldemHandRecord | null;
+  potResults?: PotResult[];
+  blindLevel?: number;
+  levelStartedAt?: number | null;
+  buyCount?: Record<string, number>;
 }
 
 export interface HSecret {
@@ -69,7 +122,8 @@ export type HMove =
   | { type: 'allin' }
   | { type: 'next' }
   | { type: 'timeout' }
-  | { type: 'sitOut'; value: boolean };
+  | { type: 'sitOut'; value: boolean }
+  | { type: 'show' };
 
 const MAX_PLAYERS = 10;
 
@@ -210,6 +264,19 @@ export function actHoldem(f: HFull, actorId: string, move: HMove, now: number): 
     case 'sitOut': {
       const p = s.players.find((x) => x.id === actorId) ?? fail('לא בשולחן');
       p.sitOut = move.value;
+      if (!move.value) p.strikes = 0;
+      break;
+    }
+    case 'show': {
+      // אחרי שכולם קיפלו - אפשר להראות את הקלפים (להתגרות)
+      if (s.phase !== 'showdown') fail('אפשר להראות קלפים רק בסוף היד');
+      const p = s.players.find((x) => x.id === actorId) ?? fail('לא בשולחן');
+      const hole = f.sec.holes[actorId];
+      if (!hole?.length || p.shown) fail('אין קלפים להראות');
+      p.shown = hole;
+      const rec = s.lastHand?.players.find((x) => x.id === actorId);
+      if (rec) rec.shown = hole;
+      log(s, p.name + ' הראה/תה קלפים 👀');
       break;
     }
     case 'timeout': {
@@ -217,7 +284,8 @@ export function actHoldem(f: HFull, actorId: string, move: HMove, now: number): 
       if (now < s.turnDeadline) fail('הזמן עוד לא נגמר');
       const p = s.players.find((x) => x.id === s.turnId)!;
       applyBet(f, p, p.bet === s.currentBet ? { type: 'check' } : { type: 'fold' });
-      if (!p.isBot) p.sitOut = true; // לא נמצא - מושב בצד
+      p.strikes = (p.strikes ?? 0) + 1;
+      if (!p.isBot && p.strikes >= MAX_STRIKES) p.sitOut = true; // פספס פעמיים ברצף - מושב בצד
       advance(f, now, p.id);
       break;
     }
@@ -230,6 +298,7 @@ export function actHoldem(f: HFull, actorId: string, move: HMove, now: number): 
       if (s.turnId !== actorId) fail('זה לא התור שלך');
       const p = s.players.find((x) => x.id === actorId)!;
       applyBet(f, p, move);
+      p.strikes = 0;
       advance(f, now, p.id);
       break;
     }
@@ -291,6 +360,7 @@ function applyBet(f: HFull, p: HPlayer, move: HMove) {
       fail('מהלך לא מוכר');
   }
   p.acted = true;
+  (s.handLog ??= []).push({ st: s.phase, id: p.id, a: p.lastAction ?? '' });
 }
 
 function nextIdx(s: HState, from: number, pred: (p: HPlayer) => boolean): number {
@@ -326,7 +396,13 @@ function startHand(f: HFull, now: number): LedgerEffect[] {
     s.phase = 'waiting';
     return effects;
   }
-  for (const p of eligible) p.inHand = true;
+  for (const p of eligible) {
+    p.inHand = true;
+    p.startChips = p.chips;
+  }
+  s.handLog = [];
+  s.potResults = [];
+  applyBlindLevel(s, now);
   s.dealerIdx = nextIdx(s, s.dealerIdx, (p) => p.inHand);
   f.sec.deck = shuffle(newDeck());
   for (const p of eligible) f.sec.holes[p.id] = [f.sec.deck.pop()!, f.sec.deck.pop()!];
@@ -343,6 +419,7 @@ function startHand(f: HFull, now: number): LedgerEffect[] {
     p.total = a;
     if (p.chips === 0) p.allIn = true;
     p.lastAction = label;
+    (s.handLog ??= []).push({ st: 'preflop', id: p.id, a: label });
   };
   post(sbIdx, s.settings.sb, `sb:${s.settings.sb}`);
   post(bbIdx, s.settings.bb, `bb:${s.settings.bb}`);
@@ -373,7 +450,7 @@ function advance(f: HFull, now: number, lastId: string | null) {
       const idx = nextIdx(s, fromIdx, (p) => canAct(p) && (!p.acted || p.bet < s.currentBet));
       const p = s.players[idx];
       s.turnId = p.id;
-      s.turnDeadline = now + TURN_SECONDS * 1000;
+      s.turnDeadline = now + turnMs(s.settings);
       if (p.isBot) {
         applyBet(f, p, botDecision(f, p));
         lastId = p.id;
@@ -434,7 +511,9 @@ function winUncontested(f: HFull, w: HPlayer) {
   const pot = potSize(s);
   w.chips += pot;
   s.winners = [{ id: w.id, name: w.name, amount: pot, cat: -1 }];
+  s.potResults = [{ amount: pot, eligible: [w.id], winners: [w.id] }];
   log(s, `${w.name} לקח/ה ${pot} 🏆`);
+  recordHand(s, 'fold', new Map());
   endHand(s);
 }
 
@@ -452,28 +531,15 @@ function showdown(f: HFull) {
   const alive = s.players.filter((p) => p.inHand && !p.folded);
   const evals = new Map(alive.map((p) => [p.id, bestHand(f.sec.holes[p.id].concat(s.board))]));
   for (const p of alive) p.shown = f.sec.holes[p.id];
-  // בניית פוטים (כולל פוטים צדדיים)
-  const levels = [...new Set(alive.map((p) => p.total))].sort((a, b) => a - b);
-  let prev = 0;
+  // בניית פוטים (קופה ראשית + קופות צדדיות)
+  const pots = computePots(s);
   const won = new Map<string, number>();
-  const pots: { amount: number; eligible: HPlayer[] }[] = [];
-  for (const L of levels) {
-    let amount = 0;
-    for (const p of s.players) amount += Math.min(p.total, L) - Math.min(p.total, prev);
-    pots.push({ amount, eligible: alive.filter((p) => p.total >= L) });
-    prev = L;
-  }
-  let leftover = 0;
-  for (const p of s.players) leftover += Math.max(0, p.total - prev);
-  if (pots.length) pots[pots.length - 1].amount += leftover;
-
+  const results: PotResult[] = [];
   for (const pot of pots) {
-    if (pot.amount <= 0) continue;
-    const best = Math.max(...pot.eligible.map((p) => evals.get(p.id)!.score));
+    const elig = alive.filter((p) => pot.eligible.includes(p.id));
+    const best = Math.max(...elig.map((p) => evals.get(p.id)!.score));
     // סדר לפי מיקום אחרי הדילר - מי שראשון מקבל את השארית
-    const ws = pot.eligible
-      .filter((p) => evals.get(p.id)!.score === best)
-      .sort((a, b) => seatDist(s, a) - seatDist(s, b));
+    const ws = elig.filter((p) => evals.get(p.id)!.score === best).sort((a, b) => seatDist(s, a) - seatDist(s, b));
     const share = Math.floor(pot.amount / ws.length);
     let rem = pot.amount - share * ws.length;
     for (const w of ws) {
@@ -482,13 +548,88 @@ function showdown(f: HFull) {
       w.chips += amt;
       won.set(w.id, (won.get(w.id) || 0) + amt);
     }
+    results.push({ amount: pot.amount, eligible: pot.eligible, winners: ws.map((w) => w.id) });
   }
+  s.potResults = results;
   s.winners = [...won.entries()].map(([id, amount]) => {
     const p = s.players.find((x) => x.id === id)!;
-    return { id, name: p.name, amount, cat: evals.get(id)!.cat };
+    return { id, name: p.name, amount, cat: evals.get(id)!.cat, best: evals.get(id)!.best };
   });
   for (const w of s.winners) log(s, `${w.name} זכה/תה ב-${w.amount} עם ${HAND_NAMES[w.cat]} 🏆`);
+  recordHand(s, 'showdown', evals);
   endHand(s);
+}
+
+// מחלק את הקופה לקופה ראשית וקופות צדדיות לפי כמה כל שחקן השקיע
+export function computePots(s: HState): { amount: number; eligible: string[] }[] {
+  const alive = s.players.filter((p) => p.inHand && !p.folded);
+  const levels = [...new Set(alive.map((p) => p.total))].sort((a, b) => a - b);
+  let prev = 0;
+  const pots: { amount: number; eligible: string[] }[] = [];
+  for (const L of levels) {
+    let amount = 0;
+    for (const p of s.players) amount += Math.min(p.total, L) - Math.min(p.total, prev);
+    const eligible = alive.filter((p) => p.total >= L).map((p) => p.id);
+    const last = pots[pots.length - 1];
+    if (last && last.eligible.length === eligible.length) last.amount += amount;
+    else pots.push({ amount, eligible });
+    prev = L;
+  }
+  let leftover = 0;
+  for (const p of s.players) leftover += Math.max(0, p.total - prev);
+  if (pots.length) pots[pots.length - 1].amount += leftover;
+  return pots.filter((p) => p.amount > 0);
+}
+
+// שמירת סיכום היד להיסטוריה
+function recordHand(s: HState, reason: 'fold' | 'showdown', evals: Map<string, { cat: number; best: Card[] }>) {
+  s.lastHand = {
+    kind: 'holdem',
+    no: s.handNo,
+    board: [...s.board],
+    pot: potSize(s),
+    blinds: [s.settings.sb, s.settings.bb],
+    reason,
+    players: s.players
+      .filter((p) => p.inHand)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        isBot: p.isBot,
+        net: p.chips - (p.startChips ?? p.chips),
+        folded: p.folded,
+        shown: p.shown,
+        cat: evals.get(p.id)?.cat,
+        best: evals.get(p.id)?.best,
+      })),
+    winners: s.winners,
+    pots: s.potResults ?? [],
+    log: s.handLog ?? [],
+  };
+}
+
+// בליינדים עולים: כל X דקות הבליינדים עולים שלב (רק בתחילת יד)
+function applyBlindLevel(s: HState, now: number) {
+  const mins = s.settings.blindUpMinutes ?? 0;
+  if (!mins) return;
+  const base = s.settings.baseBb ?? s.settings.bb;
+  s.settings.baseBb = base;
+  const ms = mins * 60000;
+  if (s.levelStartedAt == null) {
+    s.levelStartedAt = now;
+    s.blindLevel = 0;
+  } else {
+    const steps = Math.floor((now - s.levelStartedAt) / ms);
+    if (steps > 0) {
+      s.blindLevel = Math.min(BLIND_MULT.length - 1, (s.blindLevel ?? 0) + steps);
+      s.levelStartedAt += steps * ms;
+    }
+  }
+  const bb = Math.max(2, Math.round(base * BLIND_MULT[s.blindLevel ?? 0]));
+  if (bb !== s.settings.bb) log(s, `⬆ בליינדים ${Math.floor(bb / 2)}/${bb}`);
+  s.settings.bb = bb;
+  s.settings.sb = Math.max(1, Math.floor(bb / 2));
 }
 
 function seatDist(s: HState, p: HPlayer) {

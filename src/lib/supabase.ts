@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+
+// מסד הנתונים יושב בטוקיו - מריצים את השרת לידו כדי שכל מהלך יהיה מהיר
+// (דרך פרמטר בכתובת, כדי לא להוסיף כותרת שהדפדפן חוסם)
+const fn = (name: string) => `${name}?forceFunctionRegion=ap-northeast-1`;
 import { sha256Hex } from './sha256';
 import { tr, translateError } from './i18n';
 
@@ -29,7 +33,7 @@ export async function login(name: string, password: string) {
 }
 
 export async function register(name: string, password: string, avatar: string) {
-  const { data, error } = await supabase.functions.invoke('register', { body: { name, password, avatar } });
+  const { data, error } = await supabase.functions.invoke(fn('register'), { body: { name, password, avatar } });
   if (error) throw new Error(await errorText(error));
   if (data?.error) throw new Error(translateError(data.error));
   await login(name, password);
@@ -48,9 +52,16 @@ async function errorText(error: unknown): Promise<string> {
   return tr('בעיית תקשורת - נסו שוב', 'Connection problem - please try again');
 }
 
+// מאמן ה-AI (פרימיום)
+export async function coachCall(body: Record<string, unknown>): Promise<{ tip: string }> {
+  const { data, error } = await supabase.functions.invoke(fn('coach'), { body });
+  if (error) throw new Error(await errorText(error));
+  return data as { tip: string };
+}
+
 // שליחת פעולה לשרת המשחק
 export async function gameCall<T = { ok: boolean; roomId: string; code?: string }>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('game', { body });
+  const { data, error } = await supabase.functions.invoke(fn('game'), { body });
   if (error) throw new Error(await errorText(error));
   return data as T;
 }

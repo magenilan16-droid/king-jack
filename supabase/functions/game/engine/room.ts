@@ -47,13 +47,47 @@ export function createGame(
   host: PlayerBase,
   settings: BJSettings | HSettings,
 ): { full: Full; effects: LedgerEffect[] } {
-  return type === 'blackjack'
-    ? createBlackjack(host, settings as BJSettings)
-    : createHoldem(host, settings as HSettings);
+  const res = type === 'blackjack' ? createBlackjack(host, settings as BJSettings) : createHoldem(host, settings as HSettings);
+  res.full.pub.buyCount = { [host.id]: 1 };
+  return res;
 }
 
-export function joinGame(f: Full, p: PlayerBase, buyIn: number): LedgerEffect[] {
-  return f.pub.kind === 'blackjack' ? joinBlackjack(f as BJFull, p, buyIn) : joinHoldem(f as HFull, p, buyIn);
+// הצטרפות: תמיד בסכום הקבוע של השולחן. חזרה אחרי יציאה נחשבת קנייה חוזרת
+export function joinGame(f: Full, p: PlayerBase, _requested?: number): LedgerEffect[] {
+  void _requested;
+  const pub = f.pub;
+  const amount = pub.settings.buyIn;
+  const counts = (pub.buyCount ??= {});
+  const seated = pub.players.some((x) => x.id === p.id);
+  if (!seated && !p.isBot && (counts[p.id] ?? 0) >= 1) checkRebuyLimit(f, p.id);
+  const effects = pub.kind === 'blackjack' ? joinBlackjack(f as BJFull, p, amount) : joinHoldem(f as HFull, p, amount);
+  if (effects.length) counts[p.id] = (counts[p.id] ?? 0) + 1;
+  return effects;
+}
+
+function checkRebuyLimit(f: Full, playerId: string) {
+  const max = (f.pub.settings as { maxRebuys?: number | null }).maxRebuys;
+  const used = Math.max(0, (f.pub.buyCount?.[playerId] ?? 1) - 1);
+  if (max != null && used >= max) fail('נגמרו הקניות החוזרות בשולחן הזה');
+}
+
+// כמה קניות חוזרות נשארו (null = ללא הגבלה)
+export function rebuysLeft(pub: Full['pub'], playerId: string): number | null {
+  const max = (pub.settings as { maxRebuys?: number | null }).maxRebuys;
+  if (max == null) return null;
+  return Math.max(0, max - Math.max(0, (pub.buyCount?.[playerId] ?? 1) - 1));
+}
+
+// אפשר לקנות שוב רק כשנגמרו הז׳טונים
+export function canRebuyNow(pub: Full['pub'], playerId: string): boolean {
+  const p = pub.players.find((x) => x.id === playerId);
+  if (!p) return false;
+  if (pub.kind === 'blackjack') {
+    if (pub.bankerId === playerId) return false;
+    return p.chips < pub.settings.minBet;
+  }
+  const hp = p as HFull['pub']['players'][number];
+  return hp.chips === 0 && hp.pending === 0 && !(hp.allIn && hp.inHand && !hp.folded && pub.phase !== 'waiting' && pub.phase !== 'showdown');
 }
 
 function chatOf(f: Full): ChatMsg[] {
@@ -68,12 +102,16 @@ export function act(f: Full, actorId: string, move: RoomMove, now: number): { ef
   switch (move.type) {
     case 'rebuy':
       if (!me) fail('אתה לא בשולחן');
-      return {
-        effects:
-          pub.kind === 'blackjack'
-            ? rebuyBlackjack(f as BJFull, actorId, move.amount)
-            : rebuyHoldem(f as HFull, actorId, move.amount),
-      };
+      if (!canRebuyNow(pub, actorId)) fail('אפשר לקנות שוב רק כשנגמרים הז׳טונים');
+      checkRebuyLimit(f, actorId);
+      {
+        const amount = pub.settings.buyIn;
+        const effects =
+          pub.kind === 'blackjack' ? rebuyBlackjack(f as BJFull, actorId, amount) : rebuyHoldem(f as HFull, actorId, amount);
+        const counts = (pub.buyCount ??= {});
+        counts[actorId] = (counts[actorId] ?? 1) + 1;
+        return { effects };
+      }
     case 'leave':
       return {
         effects: pub.kind === 'blackjack' ? leaveBlackjack(f as BJFull, actorId) : leaveHoldem(f as HFull, actorId, now),

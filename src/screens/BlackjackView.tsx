@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type BJState, type BJPlayer, type BJHand, handValue, canDouble, canSplit } from '../engine/blackjack';
 import { Hand } from '../components/Card';
 import { Timer } from '../components/Timer';
 import { BlackjackTip } from '../components/Tips';
+import { Coach } from '../components/Coach';
 import { AsyncButton } from '../components/ui';
 import type { Theme } from '../lib/themes';
 import { pick } from '../lib/themes';
 import { fmt } from '../lib/balances';
 import { useI18n, type Lang } from '../lib/i18n';
 import { displayName } from '../lib/display';
+import { sfx } from '../lib/sound';
+import { vibrate } from '../lib/prefs';
+import { MAX_STRIKES } from '../engine/common';
 
 type Act = (move: Record<string, unknown>) => Promise<void>;
 
@@ -29,16 +33,20 @@ export function BlackjackView({
   myId,
   theme,
   tipsOn,
+  premium,
   act,
   onRebuy,
+  onSeatTap,
 }: {
   s: BJState;
   roomId: string;
   myId: string;
   theme: Theme;
   tipsOn: boolean;
+  premium: boolean;
   act: Act;
   onRebuy: () => void;
+  onSeatTap: (id: string) => void;
 }) {
   const { tr, lang } = useI18n();
   const me = s.players.find((p) => p.id === myId);
@@ -65,6 +73,29 @@ export function BlackjackView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.phase, s.round]);
 
+  // צלילים לפי מה שהשתנה בשולחן
+  const prev = useRef<BJState | null>(null);
+  useEffect(() => {
+    const p = prev.current;
+    prev.current = s;
+    if (!p) return;
+    const count = (x: BJState) => x.dealer.cards.length + x.players.reduce((a, pl) => a + pl.hands.reduce((b, h) => b + h.cards.length, 0), 0);
+    if (count(s) > count(p)) sfx.card();
+    const readyNow = s.players.filter((x) => x.ready).length;
+    if (s.phase === 'betting' && readyNow > p.players.filter((x) => x.ready).length) sfx.chips();
+    if (s.phase === 'results' && p.phase !== 'results') {
+      const mine = s.players.find((x) => x.id === myId);
+      if (mine?.hands.length) {
+        const net = mine.hands.reduce((a, h) => a + (h.payout ?? 0) - h.bet, 0);
+        if (net > 0) {
+          sfx.win();
+          vibrate([60, 40, 60, 40, 160]);
+        } else if (net < 0) sfx.lose();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [s]);
+
   // המארח מעביר אוטומטית לסיבוב הבא
   useEffect(() => {
     if (!isHost || s.phase !== 'results') return;
@@ -82,6 +113,17 @@ export function BlackjackView({
   return (
     <div className="bj">
       <div className="dealer-area">
+        <svg className="felt-print" viewBox="0 0 320 64" aria-hidden="true">
+          <path id="arc" d="M 30 58 Q 160 0 290 58" fill="none" />
+          <text>
+            <textPath href="#arc" startOffset="50%" textAnchor="middle">
+              BLACKJACK PAYS 3 TO 2
+            </textPath>
+          </text>
+          <text x="160" y="62" textAnchor="middle" className="sub-print">
+            DEALER STANDS ON 17
+          </text>
+        </svg>
         <div className="dealer-label">
           {banker
             ? `🏦 ${tr('הבנק', 'Bank')}: ${banker.avatar} ${banker.name} (${fmt(banker.chips)})`
@@ -99,17 +141,17 @@ export function BlackjackView({
 
       <div className="seats">
         {others.map((p) => (
-          <Seat key={p.id} p={p} s={s} isTurn={turnPlayer?.id === p.id} lang={lang} />
+          <Seat key={p.id} p={p} s={s} isTurn={turnPlayer?.id === p.id} lang={lang} onTap={() => onSeatTap(p.id)} />
         ))}
       </div>
 
       {me && (
-        <div className={`me-area ${myTurn ? 'my-turn' : ''}`}>
+        <div data-pid={myId} className={`me-area ${myTurn ? 'my-turn' : ''}`}>
           {me.hands.length > 0 ? (
             <div className="my-hands">
               {me.hands.map((h, i) => (
                 <div key={i} className={`my-hand ${myTurn && s.turn?.h === i ? 'active' : ''}`}>
-                  <Hand cards={h.cards} size="lg" />
+                  <Hand cards={h.cards} size="lg" stagger />
                   <div className="hand-meta">
                     <span className="total-badge">{handTotal(h)}</span>
                     <span className="bet-badge">🪙 {fmt(h.bet)}</span>
@@ -154,6 +196,9 @@ export function BlackjackView({
       <div className="action-bar">
         {s.phase === 'betting' && me && !amBanker && (
           <>
+            {(me.strikes ?? 0) >= MAX_STRIKES && (
+              <div className="strike-warn">{tr('⚠️ פספסת כמה תורות - שימו הימור כדי לחזור למשחק', '⚠️ You missed some turns - place a bet to get back in')}</div>
+            )}
             {me.chips < min ? (
               <button className="btn primary block" onClick={onRebuy}>
                 {tr(`נגמרו ה${theme.labels.chips} - קנייה נוספת 💰`, `Out of ${theme.labels.chips} - buy more 💰`)}
@@ -196,9 +241,10 @@ export function BlackjackView({
         {s.phase === 'playing' &&
           (myTurn && me && curHand ? (
             <>
+              <Coach roomId={roomId} premium={premium} contextKey={`${s.round}-${s.turn?.h}-${curHand.cards.length}`} />
               <div className="turn-row">
                 <span>{tr('התור שלך!', 'Your turn!')}</span>
-                <Timer deadline={s.turnDeadline} roomId={roomId} />
+                <Timer deadline={s.turnDeadline} roomId={roomId} mine />
               </div>
               <div className="btn-grid">
                 <AsyncButton className="btn act hit" onClick={() => act({ type: 'hit' })}>
@@ -228,7 +274,7 @@ export function BlackjackView({
             </div>
           ))}
 
-        {s.phase === 'results' && (
+        {s.phase === 'results' && me && (
           <AsyncButton className="btn primary block" onClick={() => act({ type: 'next' })}>
             {tr('סיבוב הבא ▶', 'Next round ▶')}
           </AsyncButton>
@@ -238,13 +284,13 @@ export function BlackjackView({
   );
 }
 
-function Seat({ p, s, isTurn, lang }: { p: BJPlayer; s: BJState; isTurn: boolean; lang: Lang }) {
+function Seat({ p, s, isTurn, lang, onTap }: { p: BJPlayer; s: BJState; isTurn: boolean; lang: Lang; onTap: () => void }) {
   const isBanker = s.bankerId === p.id;
   return (
-    <div className={`seat ${isTurn ? 'turn' : ''} ${p.leaving ? 'dim' : ''}`}>
+    <div className={`seat ${isTurn ? 'turn' : ''} ${p.leaving ? 'dim' : ''}`} data-pid={p.id} onClick={onTap} role="button">
       <div className="seat-head">
         <span className="avatar">{p.avatar}</span>
-        <span className="seat-name">{displayName(p, lang)}</span>
+        <span className="seat-name" dir="auto">{displayName(p, lang)}</span>
         {isBanker && <span className="tag">🏦</span>}
       </div>
       <div className="seat-chips">{fmt(p.chips)}</div>

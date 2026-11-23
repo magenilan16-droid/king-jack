@@ -4,7 +4,8 @@ import {
   type PlayerBase,
   type LedgerEffect,
   fail,
-  TURN_SECONDS,
+  turnMs,
+  MAX_STRIKES,
   cashoutEffects,
   round2,
 } from './common.ts';
@@ -27,6 +28,7 @@ export interface BJPlayer extends PlayerBase {
   ready: boolean;
   hands: BJHand[];
   leaving?: boolean;
+  strikes?: number; // כמה פעמים ברצף נגמר לו הזמן
 }
 
 export interface BJSettings {
@@ -34,6 +36,8 @@ export interface BJSettings {
   maxBet: number;
   buyIn: number;
   dealerMode: 'house' | 'player';
+  turnSeconds?: number;
+  maxRebuys?: number | null; // null = ללא הגבלה
 }
 
 export interface BJState {
@@ -49,6 +53,26 @@ export interface BJState {
   hostId: string;
   houseNet: number;
   log: string[];
+  lastHand?: BlackjackHandRecord | null;
+  buyCount?: Record<string, number>;
+}
+
+// רשומת היסטוריה של סיבוב שהסתיים
+export interface BlackjackHandRecord {
+  kind: 'blackjack';
+  no: number;
+  dealer: Card[];
+  dealerTotal: number;
+  bankerId: string | null;
+  bankDelta: number;
+  players: {
+    id: string;
+    name: string;
+    avatar: string;
+    isBot: boolean;
+    net: number;
+    hands: { cards: Card[]; bet: number; result?: BJResult; payout?: number }[];
+  }[];
 }
 
 export interface BJSecret {
@@ -218,6 +242,7 @@ export function actBlackjack(f: BJFull, actorId: string, move: BJMove, now: numb
       if (amt > me.chips) fail('אין מספיק ז׳טונים');
       me.bet = amt;
       me.ready = true;
+      me.strikes = 0;
       if (allHumansReady(s)) deal(f, now);
       break;
     }
@@ -234,6 +259,7 @@ export function actBlackjack(f: BJFull, actorId: string, move: BJMove, now: numb
       if (s.phase !== 'playing' || !s.turn) fail('זה לא הזמן');
       if (s.players[s.turn.p].id !== actorId) fail('זה לא התור שלך');
       playMove(f, move.type);
+      s.players[s.turn.p].strikes = 0;
       advance(f, now);
       break;
     }
@@ -241,6 +267,7 @@ export function actBlackjack(f: BJFull, actorId: string, move: BJMove, now: numb
       if (s.phase !== 'playing' || !s.turn || !s.turnDeadline) fail('אין תור פעיל');
       if (now < s.turnDeadline) fail('הזמן עוד לא נגמר');
       log(s, `${s.players[s.turn.p].name} - נגמר הזמן, עומד`);
+      s.players[s.turn.p].strikes = (s.players[s.turn.p].strikes ?? 0) + 1;
       playMove(f, 'stand');
       advance(f, now);
       break;
@@ -274,7 +301,8 @@ function bettors(s: BJState) {
 }
 
 function allHumansReady(s: BJState): boolean {
-  const humans = bettors(s).filter((p) => !p.isBot && p.chips >= s.settings.minBet);
+  // מי שפספס תורות ברצף לא מעכב את החלוקה
+  const humans = bettors(s).filter((p) => !p.isBot && p.chips >= s.settings.minBet && (p.strikes ?? 0) < MAX_STRIKES);
   return humans.length > 0 && humans.every((p) => p.ready);
 }
 
@@ -388,7 +416,7 @@ function advance(f: BJFull, now: number) {
       playMove(f, mv);
       continue;
     }
-    s.turnDeadline = now + TURN_SECONDS * 1000;
+    s.turnDeadline = now + turnMs(s.settings);
     return;
   }
 }
@@ -443,6 +471,24 @@ function finishRound(f: BJFull) {
   if (banker) banker.chips = round2(banker.chips + bankDelta);
   else s.houseNet = round2(s.houseNet + bankDelta);
   log(s, `סיבוב ${s.round}: דילר ${d > 21 ? 'נשרף 💥' : d}`);
+  s.lastHand = {
+    kind: 'blackjack',
+    no: s.round,
+    dealer: [...s.dealer.cards],
+    dealerTotal: d,
+    bankerId: s.bankerId,
+    bankDelta,
+    players: s.players
+      .filter((p) => p.hands.length)
+      .map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        isBot: p.isBot,
+        net: round2(p.hands.reduce((a, h) => a + (h.payout ?? 0) - h.bet, 0)),
+        hands: p.hands.map((h) => ({ cards: [...h.cards], bet: h.bet, result: h.result, payout: h.payout })),
+      })),
+  };
   s.phase = 'results';
 }
 
