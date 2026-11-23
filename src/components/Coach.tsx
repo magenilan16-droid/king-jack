@@ -1,6 +1,6 @@
 // כפתור המאמן האישי (פרימיום): שולח את המצב לשרת ומציג המלצה קצרה
 import { useEffect, useState, type ReactNode } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, X } from 'lucide-react';
 import { coachCall } from '../lib/supabase';
 import { useI18n } from '../lib/i18n';
 import { toast } from './ui';
@@ -34,7 +34,7 @@ export function Coach({
 
   const ask = async () => {
     if (!premium) {
-      toast(tr('⭐ המאמן האישי זמין למנויי פרימיום - בקשו מהמנהל לאשר לכם', '⭐ The personal coach is for premium members - ask the admin'));
+      toast(tr('המאמן האישי זמין למנויי פרימיום. בקשו מהמנהל לאשר לכם.', 'The personal coach is for premium members. Ask the admin.'));
       return;
     }
     setBusy(true);
@@ -52,12 +52,12 @@ export function Coach({
     <div className={compact ? 'coach compact' : 'coach'}>
       {tip && (
         <div className="coach-bubble">
-          {!compact && <span className="coach-avatar">🤖</span>}
+          
           <div className="grow" dir="auto">
             {withBold(tip)}
           </div>
-          <button className="icon-btn small" onClick={() => setTip(null)} aria-label={tr('סגור', 'Close')}>
-            ✕
+          <button className="icon-btn small" onClick={() => setTip(null)} aria-label={tr('סגירה', 'Close')}>
+            <X size={16} />
           </button>
         </div>
       )}
@@ -75,7 +75,7 @@ export function Coach({
                 </>
               ) : (
                 <>
-                  🤖 {tr('מה המאמן אומר?', 'Ask the coach')} {!premium && <span className="tag gold">⭐</span>}
+                  {!premium && <Lock size={13} />} {tr('מה המאמן אומר?', 'Ask the coach')}
                 </>
               )}
             </>

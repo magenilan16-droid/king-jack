@@ -120,3 +120,8 @@ export function translateError(msg: string): string {
   if (m) return `Minimum raise is to ${m[1]}`;
   return msg;
 }
+
+// ספירה עם יחיד/רבים: count(1, 'ערב אחד', 'ערבים', '1 night', 'nights')
+export function count(n: number, heOne: string, heMany: string, enOne: string, enMany: string): string {
+  return n === 1 ? tr(heOne, enOne) : tr(`${n} ${heMany}`, `${n} ${enMany}`);
+}

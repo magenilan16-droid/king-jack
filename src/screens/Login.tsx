@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Eye, EyeOff, Download } from 'lucide-react';
 import { login, register } from '../lib/supabase';
 import { AVATARS } from '../lib/themes';
 import { useI18n } from '../lib/i18n';
@@ -46,16 +47,16 @@ export function Login({ onInstall }: { onInstall: () => void }) {
     <div className="screen login-screen">
       <LangToggle />
       <div className="login-hero">
-        <img src="icons/icon-192.png" alt="" className="logo" />
+        <img src="icons/kj-192.png" alt="" className="logo" />
         <h1>King Jack</h1>
-        <p>{tr('טקסס הולדם · בלאק ג׳ק · חובות וקיזוז', "Texas Hold'em · Blackjack · Debts & settle-up")}</p>
+        <p>{tr('פוקר ובלאק ג׳ק עם החבר׳ה, כולל ספירת חובות', 'Poker and blackjack with friends, debts included')}</p>
       </div>
-      <div className="tabs">
+      <div className="tabs" role="tablist">
         <button className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>
-          {tr('פעם ראשונה? הרשמה', 'First time? Sign up')}
+          {tr('הרשמה', 'Sign up')}
         </button>
         <button className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>
-          {tr('כבר רשום? כניסה', 'Have an account? Log in')}
+          {tr('כניסה', 'Log in')}
         </button>
       </div>
       <form className="card-form" onSubmit={submit}>
@@ -80,8 +81,8 @@ export function Login({ onInstall }: { onInstall: () => void }) {
               onChange={(e) => setPw(e.target.value)}
               autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
             />
-            <button type="button" className="icon-btn" onClick={() => setShow(!show)} aria-label={tr('הצג סיסמה', 'Show password')}>
-              {show ? '🙈' : '👁️'}
+            <button type="button" className="icon-btn" onClick={() => setShow(!show)} aria-label={show ? tr('הסתרת הסיסמה', 'Hide password') : tr('הצגת הסיסמה', 'Show password')}>
+              {show ? <EyeOff size={19} /> : <Eye size={19} />}
             </button>
           </div>
         </label>
@@ -98,7 +99,7 @@ export function Login({ onInstall }: { onInstall: () => void }) {
           </div>
         )}
         <button className="btn primary block big" disabled={busy}>
-          {busy ? <span className="spinner" /> : mode === 'login' ? tr('כניסה 🃏', 'Log in 🃏') : tr('יאללה, נרשמים 🚀', "Let's go 🚀")}
+          {busy ? <span className="spinner" /> : mode === 'login' ? tr('כניסה', 'Log in') : tr('הרשמה', 'Sign up')}
         </button>
         <p className="hint">
           {tr(
@@ -108,7 +109,7 @@ export function Login({ onInstall }: { onInstall: () => void }) {
         </p>
       </form>
       <button className="link-btn" onClick={onInstall}>
-        {tr('📲 איך מתקינים את האפליקציה בטלפון?', '📲 How do I install the app on my phone?')}
+        <Download size={17} /> {tr('איך מתקינים את האפליקציה בטלפון', 'How to install the app on your phone')}
       </button>
     </div>
   );

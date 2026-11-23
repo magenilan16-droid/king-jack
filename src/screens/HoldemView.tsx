@@ -110,7 +110,7 @@ export function HoldemView({
     if (grew > 0 && s.handNo === p.handNo) sfx.chips(Math.min(6, 2 + Math.round(grew / Math.max(1, s.settings.bb * 3))));
     if ((s.blindLevel ?? 0) > (p.blindLevel ?? 0)) {
       sfx.blindsUp();
-      toast(tr(`⬆ הבליינדים עלו ל-${s.settings.sb}/${s.settings.bb}`, `⬆ Blinds are now ${s.settings.sb}/${s.settings.bb}`), 'win');
+      toast(tr(`הבליינדים עלו ל-${s.settings.sb}/${s.settings.bb}`, `Blinds are now ${s.settings.sb}/${s.settings.bb}`), 'win');
     }
     for (const pl of s.players) {
       const old = p.players.find((x) => x.id === pl.id);
@@ -259,14 +259,14 @@ export function HoldemView({
         )}
         {me && canRebuyNow(s, myId) && (
           <button className="pk-btn gold block" onClick={onRebuy}>
-            {tr('קנייה חוזרת', 'Rebuy')} · {fmt(s.settings.buyIn)}
+            {tr(`קנייה חוזרת ב-${fmt(s.settings.buyIn)}`, `Rebuy for ${fmt(s.settings.buyIn)}`)}
           </button>
         )}
 
         {s.phase === 'waiting' &&
           (me ? (
             <AsyncButton className="pk-btn gold block" onClick={() => act({ type: 'start' })} disabled={readyPlayers < 2}>
-              {readyPlayers < 2 ? tr('צריך לפחות 2 שחקנים · אפשר להוסיף בוט בתפריט', 'Need 2+ players · add a bot from the menu') : tr('התחלת יד', 'Deal')}
+              {readyPlayers < 2 ? tr('צריך לפחות 2 שחקנים. אפשר להוסיף בוט בתפריט.', 'Need 2+ players. Add a bot from the menu.') : tr('התחלת יד', 'Deal')}
             </AsyncButton>
           ) : (
             <div className="pk-note">{tr('מחכים שמישהו בשולחן יחלק', 'Waiting for someone at the table to deal')}</div>
@@ -425,7 +425,7 @@ function Seat({
         {isTurn && deadline && <TurnRing deadline={deadline} total={total} />}
         <Avatar name={p.name} emoji={p.avatar} bot={p.isBot} size={isMe ? 50 : 44} />
         {isDealer && <span className="pk-dealer">D</span>}
-        {p.sitOut && <span className="pk-away">💤</span>}
+        {p.sitOut && <span className="pk-away">{lang === 'he' ? 'הפסקה' : 'Away'}</span>}
       </span>
       <span className="pk-plate">
         <span className="pk-name" dir="auto">

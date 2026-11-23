@@ -62,9 +62,9 @@ export function ChatSheet({
     }
   };
   return (
-    <Sheet open={open} onClose={onClose} title={tr('💬 צ׳אט השולחן', '💬 Table chat')}>
+    <Sheet open={open} onClose={onClose} title={tr('צ׳אט השולחן', 'Table chat')}>
       <div className="chat-list" ref={listRef}>
-        {chat.length === 0 && <div className="empty">{tr('עוד אין הודעות. תתחילו לעקוץ 😏', 'No messages yet. Start the trash talk 😏')}</div>}
+        {chat.length === 0 && <div className="empty">{tr('עוד אין הודעות. אפשר להתחיל לעקוץ.', 'No messages yet. Start the trash talk.')}</div>}
         {chat.map((m, i) => (
           <div key={i} className={`chat-msg ${m.id === myId ? 'mine' : ''}`}>
             {m.id !== myId && <b>{m.name}</b>}
@@ -86,8 +86,8 @@ export function ChatSheet({
           send(text);
         }}
       >
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={tr('כתבו משהו...', 'Say something...')} maxLength={120} />
-        <button className="btn small" type="submit">
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder={tr('הודעה לשולחן', 'Message the table')} aria-label={tr('הודעה', 'Message')} maxLength={120} />
+        <button className="btn primary" type="submit">
           {tr('שלח', 'Send')}
         </button>
       </form>

@@ -68,7 +68,7 @@ export function computeLines(
   const kupa = Math.round(-lines.reduce((a, l) => a + l.net, 0) * 100) / 100;
   void botsNet;
   const balances: Balance[] = lines.map((l) => ({ id: l.id, name: l.name, net: l.net }));
-  if (Math.abs(kupa) > 0.005) balances.push({ id: KUPA_ID, name: tr('🏦 הקופה', '🏦 The Kitty'), net: kupa });
+  if (Math.abs(kupa) > 0.005) balances.push({ id: KUPA_ID, name: tr('הקופה', 'The Kitty'), net: kupa });
   return { lines, kupa, transfers: settle(balances) };
 }
 
@@ -76,7 +76,7 @@ export function computeLines(
 export function signed(n: number, unit = ''): string {
   const r = Math.round(n * 100) / 100;
   const sign = r > 0 ? '+' : r < 0 ? '-' : '';
-  return `‎${sign}${unit}${fmt(Math.abs(r))}`;
+  return `⁦${sign}${unit}${fmt(Math.abs(r))}⁩`;
 }
 
 export function fmt(n: number): string {

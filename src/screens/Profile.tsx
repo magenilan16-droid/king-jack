@@ -1,5 +1,5 @@
 // מסך פרופיל והגדרות
-import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, Volume2, Languages, Palette, Smile } from 'lucide-react';
+import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, Volume2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase, type Profile as P } from '../lib/supabase';
 import { allThemes, AVATARS, type Theme, type ThemeId } from '../lib/themes';
 import { isIOS, isStandalone } from '../lib/platform';
@@ -7,6 +7,7 @@ import { usePushSetup, sendTestPush } from '../components/PushSetup';
 import { forgetPushOnThisDevice } from '../lib/push';
 import { useMuted } from '../lib/sound';
 import { useI18n } from '../lib/i18n';
+import { Avatar } from '../components/Avatar';
 import { AsyncButton } from '../components/ui';
 
 export function ProfileScreen({
@@ -31,6 +32,7 @@ export function ProfileScreen({
   const { tr, lang, setLang } = useI18n();
   const push = usePushSetup(onInstall);
   const [muted, setMuted] = useMuted();
+  const Chev = lang === 'he' ? ChevronLeft : ChevronRight;
 
   return (
     <div className="screen has-nav">
@@ -39,23 +41,25 @@ export function ProfileScreen({
       </header>
       <div className="content">
         <div className="profile-hero">
-          <span className="big-avatar ring">{profile.avatar}</span>
-          <h2 dir="auto">{profile.name}</h2>
-          <div className="badges">
-            {profile.is_premium && <span className="tag gold">⭐ Premium</span>}
-            {profile.is_admin && <span className="tag">🛡️ {tr('מנהל', 'Admin')}</span>}
+          <Avatar name={profile.name} emoji={profile.avatar} size={64} />
+          <div className="grow">
+            <h2 dir="auto">{profile.name}</h2>
+            <div className="badges">
+              {profile.is_premium && <span className="tag brass">Premium</span>}
+              {profile.is_admin && <span className="tag">{tr('מנהל', 'Admin')}</span>}
+              {!profile.is_premium && !profile.is_admin && <span className="sub">{tr('שחקן בקבוצה', 'Group member')}</span>}
+            </div>
           </div>
         </div>
 
+        <div className="list-label">{tr('הדמות שלי', 'My avatar')}</div>
         <div className="card-group">
-          <div className="group-title">
-            <Smile size={16} /> {tr('הדמות שלי', 'My avatar')}
-          </div>
           <div className="avatar-grid">
             {AVATARS.map((a) => (
               <button
                 key={a}
                 className={`avatar-opt ${a === profile.avatar ? 'active' : ''}`}
+                aria-pressed={a === profile.avatar}
                 onClick={async () => {
                   await supabase.rpc('game_update_profile', { p_name: profile.name, p_avatar: a });
                   onProfileChange();
@@ -67,44 +71,45 @@ export function ProfileScreen({
           </div>
         </div>
 
+        <div className="list-label">{tr('שפה ומראה', 'Language & look')}</div>
         <div className="card-group">
-          <div className="group-title">
-            <Languages size={16} /> {tr('שפה', 'Language')}
-          </div>
-          <div className="seg">
-            <button className={lang === 'he' ? 'active' : ''} onClick={() => setLang('he')}>
+          <div className="seg" role="group" aria-label={tr('שפה', 'Language')}>
+            <button className={lang === 'he' ? 'active' : ''} aria-pressed={lang === 'he'} onClick={() => setLang('he')}>
               עברית
             </button>
-            <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>
+            <button className={lang === 'en' ? 'active' : ''} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>
               English
             </button>
           </div>
-          <div className="group-title">
-            <Palette size={16} /> {tr('ערכת נושא (רק אצלך)', 'Theme (only on your phone)')}
-          </div>
+          <div className="group-title">{tr('ערכת נושא (רק בטלפון שלך)', 'Theme (only on your phone)')}</div>
           <div className="theme-picker">
             {allThemes(lang).map((t) => (
-              <button key={t.id} className={`theme-opt ${t.id === theme.id ? 'active' : ''}`} onClick={() => setTheme(t.id)}>
-                <span>{t.emoji}</span>
+              <button key={t.id} className={`theme-opt ${t.id === theme.id ? 'active' : ''}`} aria-pressed={t.id === theme.id} onClick={() => setTheme(t.id)}>
+                <span aria-hidden="true">{t.emoji}</span>
                 {t.name}
               </button>
             ))}
           </div>
         </div>
 
+        <div className="list-label">{tr('משחק', 'Game')}</div>
         <div className="menu-list">
           <label className="menu-item toggle">
             <span className="mi">
-              <Lightbulb size={19} /> {tr('טיפים חכמים בזמן משחק', 'Smart in-game tips')}
+              <Lightbulb size={19} /> {tr('טיפים בזמן משחק', 'In-game tips')}
             </span>
-            <input type="checkbox" checked={tipsOn} onChange={(e) => setTipsOn(e.target.checked)} />
+            <input type="checkbox" role="switch" checked={tipsOn} onChange={(e) => setTipsOn(e.target.checked)} />
           </label>
           <label className="menu-item toggle">
             <span className="mi">
-              <Volume2 size={19} /> {tr('צלילי משחק', 'Game sounds')}
+              <Volume2 size={19} /> {tr('צלילים', 'Sounds')}
             </span>
-            <input type="checkbox" checked={!muted} onChange={(e) => setMuted(!e.target.checked)} />
+            <input type="checkbox" role="switch" checked={!muted} onChange={(e) => setMuted(!e.target.checked)} />
           </label>
+        </div>
+
+        <div className="list-label">{tr('טלפון', 'Phone')}</div>
+        <div className="menu-list">
           <AsyncButton
             className="menu-item"
             onClick={async () => {
@@ -119,10 +124,10 @@ export function ProfileScreen({
               {push.perm === 'granted'
                 ? tr('פעילות', 'On')
                 : push.perm === 'denied'
-                  ? tr('חסומות - איך משחררים', 'Blocked - how to fix')
+                  ? tr('חסומות, איך משחררים', 'Blocked, how to fix')
                   : isIOS && !isStandalone()
                     ? tr('צריך להתקין קודם', 'Install first')
-                    : tr('לחצו להפעלה', 'Tap to turn on')}
+                    : tr('כבויות, להפעלה', 'Off, tap to turn on')}
             </span>
           </AsyncButton>
           {push.perm === 'granted' && (
@@ -132,29 +137,39 @@ export function ProfileScreen({
               </span>
             </AsyncButton>
           )}
-          {push.sheet}
           <button className="menu-item" onClick={onInstall}>
             <span className="mi">
               <Download size={19} /> {tr('התקנה בטלפון', 'Install on your phone')}
             </span>
+            <Chev size={18} className="chev-end" />
           </button>
+        </div>
+        {push.sheet}
+
+        <div className="menu-list">
           {profile.is_admin && (
             <button className="menu-item" onClick={onAdmin}>
               <span className="mi">
-                <Shield size={19} /> {tr('ניהול (מנהל)', 'Admin panel')}
+                <Shield size={19} /> {tr('ניהול הקבוצה', 'Group admin')}
               </span>
+              <Chev size={18} className="chev-end" />
             </button>
           )}
-          <button className="menu-item danger" onClick={async () => {
+          <button
+            className="menu-item danger"
+            onClick={async () => {
               await forgetPushOnThisDevice();
               await supabase.auth.signOut();
-            }}>
+            }}
+          >
             <span className="mi">
               <LogOut size={19} /> {tr('התנתקות', 'Log out')}
             </span>
           </button>
         </div>
-        <p className="hint center">King Jack 👑 · v2</p>
+        <p className="hint center app-version" translate="no">
+          King Jack v3
+        </p>
       </div>
     </div>
   );

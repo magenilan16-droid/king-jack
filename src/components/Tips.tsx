@@ -36,7 +36,7 @@ export function BlackjackTip({
   }
   return (
     <div className="tip">
-      <span className="tip-icon">💡</span>
+      <span className="tip-icon" aria-hidden="true">i</span>
       <div>
         <b>
           {tr('כדאי ', 'Best move: ')}
@@ -88,23 +88,23 @@ export function HoldemTip({
     const strong = Math.min(0.8, 1.5 / (opponents + 1));
     if (toCall === 0) {
       if (eq > strong) {
-        advice = tr('יד חזקה - שווה להמר/להעלות 💪', 'Strong hand - worth betting 💪');
+        advice = tr('יד חזקה, שווה להמר או להעלות', 'Strong hand, worth betting');
         tone = 'good';
       } else if (board.length === 5) {
-        advice = tr('יד חלשה - צ׳ק ומקווים לטוב 🤞', 'Weak hand - just check 🤞');
+        advice = tr('יד חלשה, עדיף צ׳ק', 'Weak hand, just check');
       } else {
         advice = tr('אפשר לעשות צ׳ק ולראות קלף בחינם', 'You can check and see a free card');
       }
     } else if (eq > Math.max(strong, potOdds + 0.15)) {
-      advice = tr('יד חזקה - שקלו העלאה 💪', 'Strong hand - consider raising 💪');
+      advice = tr('יד חזקה, שקלו העלאה', 'Strong hand, consider raising');
       tone = 'good';
     } else if (eq >= potOdds) {
-      advice = tr('הסיכוי שווה את המחיר - קול סביר ✅', 'The odds justify the price - calling is fine ✅');
+      advice = tr('הסיכוי שווה את המחיר, קול סביר', 'The odds justify the price, calling is fine');
       tone = 'good';
     } else if (eq >= potOdds - 0.05) {
-      advice = tr('גבולי... תלוי כמה אתם מרגישים בלוף 🤔', 'Borderline... depends if you smell a bluff 🤔');
+      advice = tr('גבולי, תלוי אם אתם מריחים בלוף', 'Borderline, depends if you smell a bluff');
     } else {
-      advice = tr('הסיכוי נמוך מהמחיר - עדיף לוותר ❌', 'Odds are below the price - better to fold ❌');
+      advice = tr('הסיכוי נמוך מהמחיר, עדיף לוותר', 'Odds are below the price, better to fold');
       tone = 'bad';
     }
   }
@@ -134,7 +134,7 @@ export function HoldemTip({
   }
   return (
     <div className={`tip ${tone}`}>
-      <span className="tip-icon">💡</span>
+      <span className="tip-icon" aria-hidden="true">i</span>
       <div className="grow">
         <div className="tip-stats">
           {made && (

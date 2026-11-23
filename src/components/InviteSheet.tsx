@@ -1,5 +1,7 @@
 // הזמנת חברים לשולחן: התראה באפליקציה + פוש, או קישור בוואטסאפ
 import { useEffect, useState } from 'react';
+import { Check, Link2, MessageCircle } from 'lucide-react';
+import { Avatar } from './Avatar';
 import { supabase, gameCall, type Profile } from '../lib/supabase';
 import { useI18n } from '../lib/i18n';
 import { Sheet, AsyncButton, toast } from './ui';
@@ -47,47 +49,49 @@ export function InviteSheet({
       return n;
     });
   const waText = tr(
-    `בוא/י לשחק איתנו ב-King Jack 👑\nשולחן: "${roomName}"\nקוד: ${code}\n${joinLink(code)}`,
-    `Come play with us on King Jack 👑\nTable: "${roomName}"\nCode: ${code}\n${joinLink(code)}`,
+    `בוא/י לשחק איתנו ב-King Jack\nשולחן: "${roomName}"\nקוד: ${code}\n${joinLink(code)}`,
+    `Come play with us on King Jack\nTable: "${roomName}"\nCode: ${code}\n${joinLink(code)}`,
   );
 
   return (
-    <Sheet open={open} onClose={onClose} title={tr('📣 הזמנת חברים', '📣 Invite friends')}>
+    <Sheet open={open} onClose={onClose} title={tr('הזמנת חברים', 'Invite friends')}>
       <div className="invite-code">
-        {tr('קוד השולחן:', 'Table code:')} <b>{code}</b>
+        {tr('קוד השולחן', 'Table code')} <b translate="no">{code}</b>
       </div>
       <div className="row gap">
         <a className="btn whatsapp grow" href={`https://wa.me/?text=${encodeURIComponent(waText)}`} target="_blank" rel="noreferrer">
-          {tr('שליחה בוואטסאפ 💬', 'Send on WhatsApp 💬')}
+          <MessageCircle size={18} /> {tr('וואטסאפ', 'WhatsApp')}
         </a>
         <button
           className="btn ghost"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(joinLink(code));
-              toast(tr('הקישור הועתק ✔', 'Link copied ✔'));
+              toast(tr('הקישור הועתק', 'Link copied'));
             } catch {
               toast(joinLink(code));
             }
           }}
         >
-          {tr('העתק קישור', 'Copy link')}
+          <Link2 size={18} /> {tr('העתקת קישור', 'Copy link')}
         </button>
       </div>
-      <h3 className="section-title">{tr('או שלחו התראה לחברים רשומים 🔔', 'Or notify registered friends 🔔')}</h3>
-      <input className="input" placeholder={tr('חיפוש שם...', 'Search name...')} value={q} onChange={(e) => setQ(e.target.value)} />
+      <h3 className="section-title">{tr('התראה לחברים מהקבוצה', 'Notify friends from the group')}</h3>
+      <input className="input" placeholder={tr('חיפוש לפי שם', 'Search by name')} aria-label={tr('חיפוש חבר', 'Search friend')} value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="people-list">
         {list.length === 0 && <div className="empty">{tr('אין חברים נוספים רשומים עדיין', 'No other registered friends yet')}</div>}
         {list.map((p) => (
-          <button key={p.id} className={`person ${sel.has(p.id) ? 'selected' : ''}`} onClick={() => toggle(p.id)}>
-            <span className="avatar">{p.avatar}</span>
-            <span className="grow">{p.name}</span>
-            <span className="check">{sel.has(p.id) ? '✔' : ''}</span>
+          <button key={p.id} className={`person ${sel.has(p.id) ? 'selected' : ''}`} aria-pressed={sel.has(p.id)} onClick={() => toggle(p.id)}>
+            <Avatar name={p.name} emoji={p.avatar} size={32} />
+            <span className="grow" dir="auto">{p.name}</span>
+            <span className="check" aria-hidden="true">
+              <Check size={14} strokeWidth={3} />
+            </span>
           </button>
         ))}
       </div>
       <AsyncButton
-        className="btn primary block"
+        className="btn primary block big"
         disabled={sel.size === 0}
         onClick={async () => {
           const r = await gameCall<{ ok: boolean; invited: number; pushed: number }>({
@@ -95,11 +99,11 @@ export function InviteSheet({
             roomId,
             userIds: [...sel],
           });
-          toast(tr(`נשלחו ${r.invited} הזמנות 🔔`, `${r.invited} invites sent 🔔`), 'win');
+          toast(tr(`נשלחו ${r.invited} הזמנות`, `${r.invited} invites sent`), 'win');
           onClose();
         }}
       >
-        {tr(`שליחת הזמנה (${sel.size})`, `Send invite (${sel.size})`)}
+        {sel.size ? tr(`שליחת הזמנה ל-${sel.size}`, `Invite ${sel.size}`) : tr('בחרו חברים להזמנה', 'Pick friends to invite')}
       </AsyncButton>
     </Sheet>
   );

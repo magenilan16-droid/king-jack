@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import { KeyRound, Users, ChevronLeft, ChevronRight, Bell, Download, Radio, TrendingUp, Wallet, Trash2 } from 'lucide-react';
+import { KeyRound, ChevronLeft, ChevronRight, Bell, Download, Trash2 } from 'lucide-react';
 import { supabase, gameCall, type Profile } from '../lib/supabase';
 import { isStandalone, isIOS } from '../lib/platform';
 import { usePushSetup } from '../components/PushSetup';
 import { Avatar } from '../components/Avatar';
+import { ChipStack } from '../components/Chips';
 import { fmt, signed } from '../lib/balances';
-import { useI18n } from '../lib/i18n';
-import { Sheet, AsyncButton, NumberStepper, toast } from '../components/ui';
+import { useI18n, count } from '../lib/i18n';
+import { Sheet, AsyncButton, toast } from '../components/ui';
+import { CreateSheet } from './CreateSheet';
 import type { RoomState } from '../lib/useRoom';
 
 interface LobbyRoom {
@@ -43,7 +45,7 @@ export function Lobby({
   const push = usePushSetup(onInstall);
   const [removing, setRemoving] = useState<LobbyRoom | null>(null);
   const [month, setMonth] = useState<{ net: number; nights: number } | null>(null);
-  const [debt, setDebt] = useState<{ owe: number; owed: number }>({ owe: 0, owed: 0 });
+  const [debt, setDebt] = useState<{ owe: number; owed: number } | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -125,119 +127,124 @@ export function Lobby({
     hour < 5 ? tr('לילה טוב', 'Good night') : hour < 12 ? tr('בוקר טוב', 'Good morning') : hour < 18 ? tr('צהריים טובים', 'Good afternoon') : tr('ערב טוב', 'Good evening');
   const Chev = lang === 'he' ? ChevronLeft : ChevronRight;
   const gameName = (t: string) => (t === 'blackjack' ? tr('בלאק ג׳ק', 'Blackjack') : tr('טקסס הולדם', "Texas Hold'em"));
-  const limitsOf = (r: LobbyRoom) =>
+  const limitsOf = (r: LobbyRoom): { l: string; v: string } =>
     'sb' in r.state.settings
-      ? `${tr('בליינדים', 'Blinds')} ${r.state.settings.sb}/${r.state.settings.bb}`
+      ? { l: tr('בליינדים', 'Blinds'), v: `${r.state.settings.sb}/${r.state.settings.bb}` }
       : 'minBet' in r.state.settings
-        ? `${tr('הימור', 'Bet')} ${r.state.settings.minBet}-${r.state.settings.maxBet}`
-        : '';
+        ? { l: tr('הימור', 'Bet'), v: `${r.state.settings.minBet}-${r.state.settings.maxBet}` }
+        : { l: '', v: '' };
+  const debtNet = debt ? debt.owed - debt.owe : 0;
+  const debtSub = !debt
+    ? ''
+    : debt.owe > 0 && debt.owed > 0
+      ? tr(`לשלם ₪${fmt(debt.owe)}, לקבל ₪${fmt(debt.owed)}`, `Pay ₪${fmt(debt.owe)}, get ₪${fmt(debt.owed)}`)
+      : debt.owe > 0
+        ? tr('לשלם', 'To pay')
+        : debt.owed > 0
+          ? tr('לקבל', 'To collect')
+          : tr('הכל סגור', 'All settled');
+  const openCreate = (t: 'holdem' | 'blackjack') => {
+    setCreateType(t);
+    setSheet('create');
+  };
 
   return (
     <div className="screen lobby has-nav">
       <header className="lobby-top">
         <div className="brand-row">
-          <img src="icons/icon-192.png" alt="" className="brand-logo" />
-          <span className="wordmark">King Jack</span>
+          <img src="icons/kj-192.png" alt="" className="brand-logo" />
+          <span className="wordmark" translate="no">
+            King Jack
+          </span>
         </div>
       </header>
 
       <div className="content">
-        {/* כרטיס פתיחה */}
-        <div className="hero-card">
-          <div className="hero-top">
-            <span className="hero-avatar">{profile.avatar}</span>
+        {/* המקום שלי: חודש וחובות */}
+        <section className="seat-card">
+          <div className="sc-top">
+            <Avatar name={profile.name} emoji={profile.avatar} size={46} />
             <div className="grow">
-              <div className="hero-greet">{greet},</div>
-              <div className="hero-name" dir="auto">
-                {profile.name} {profile.is_premium && <span className="tag gold">⭐ Premium</span>}
+              <div className="sc-greet">{greet}</div>
+              <div className="sc-name" dir="auto">
+                {profile.name}
               </div>
             </div>
+            {profile.is_premium && <span className="tag brass">Premium</span>}
           </div>
-          <div className="hero-stats">
-            <div>
-              <div className="hs-label">
-                <TrendingUp size={14} /> {tr('החודש', 'This month')}
-              </div>
-              <div className={`hs-value ${month && month.net > 0 ? 'pos' : month && month.net < 0 ? 'neg' : ''}`}>
-                {month ? signed(month.net) : '…'}
-              </div>
-              <div className="hs-sub">
-                {month?.nights ?? 0} {tr('ערבים', 'nights')}
-              </div>
+          <div className="sc-stats">
+            <div className="sc-stat">
+              <span className="sc-label">{tr('החודש', 'This month')}</span>
+              <b className={`sc-num ${month && month.net > 0 ? 'pos' : month && month.net < 0 ? 'neg' : ''}`}>{month ? signed(month.net) : '…'}</b>
+              <span className="sc-sub">{month ? count(month.nights, 'ערב אחד', 'ערבים', '1 night', 'nights') : ''}</span>
             </div>
-            <button className="hs-debts" onClick={onDebts}>
-              <div className="hs-label">
-                <Wallet size={14} /> {tr('חובות פתוחים', 'Open debts')}
-              </div>
-              <div className="hs-value small">
-                {debt.owe > 0 && <span className="neg">{signed(-debt.owe, '₪')}</span>} {debt.owed > 0 && <span className="pos">{signed(debt.owed, '₪')}</span>}
-                {debt.owe === 0 && debt.owed === 0 && <span>{tr('נקי ✨', 'All clear ✨')}</span>}
-              </div>
+            <button className="sc-stat link" onClick={onDebts}>
+              <span className="sc-label">
+                {tr('חובות פתוחים', 'Open debts')} <Chev size={14} />
+              </span>
+              <b className={`sc-num ${debtNet > 0 ? 'pos' : debtNet < 0 ? 'neg' : ''}`}>{debt ? (debtNet === 0 ? '0' : signed(debtNet, '₪')) : '…'}</b>
+              <span className="sc-sub">{debtSub}</span>
             </button>
           </div>
-        </div>
+        </section>
 
         {!isStandalone() && (
-          <button className="banner install-banner" onClick={onInstall}>
-            <Download size={22} />
+          <button className="banner" onClick={onInstall}>
+            <span className="banner-ic">
+              <Download size={19} />
+            </span>
             <div className="grow">
-              <b>{tr('התקינו את האפליקציה למסך הבית', 'Install the app on your home screen')}</b>
-              <div className="sub">{isIOS ? tr('אייפון: 4 צעדים קצרים, ומקבלים גם התראות', 'iPhone: 4 quick steps, plus notifications') : tr('לחיצה אחת - ואתם בפנים', "One tap and you're in")}</div>
+              <b>{tr('התקנה למסך הבית', 'Install on your home screen')}</b>
+              <div className="sub">{isIOS ? tr('באייפון זה גם מה שמפעיל התראות', 'On iPhone this is also what enables notifications') : tr('נפתח כמו אפליקציה, בלי דפדפן', 'Opens like an app, no browser bar')}</div>
             </div>
-            <Chev size={20} />
+            <Chev size={18} className="banner-chev" />
           </button>
         )}
         {(isStandalone() || !isIOS) && push.perm !== 'granted' && (
           <div className="banner">
-            <Bell size={22} />
+            <span className="banner-ic">
+              <Bell size={19} />
+            </span>
             <div className="grow">
-              <b>{push.perm === 'denied' ? tr('ההתראות חסומות', 'Notifications are blocked') : tr('הפעילו התראות', 'Turn on notifications')}</b>
-              <div className="sub">{tr('הזמנות, "התור שלך" וזירוזים מחברים', 'Invites, "your turn" and nudges from friends')}</div>
+              <b>{push.perm === 'denied' ? tr('ההתראות חסומות', 'Notifications are blocked') : tr('התראות כבויות', 'Notifications are off')}</b>
+              <div className="sub">{tr('הזמנות, תור שלך וזירוזים מחברים', 'Invites, your turn and nudges from friends')}</div>
             </div>
             {push.perm === 'denied' ? (
-              <button className="btn small" onClick={() => push.openHelp('denied')}>
+              <button className="btn small ghost" onClick={() => push.openHelp('denied')}>
                 {tr('איך משחררים', 'How to fix')}
               </button>
             ) : (
               <AsyncButton className="btn small primary" onClick={push.run}>
-                {tr('הפעלה', 'Enable')}
+                {tr('הפעלה', 'Turn on')}
               </AsyncButton>
             )}
           </div>
         )}
         {push.sheet}
 
-        {/* אריחי משחק */}
+        {/* פתיחת שולחן */}
         <div className="section-head">
           <h2>{tr('פתיחת שולחן', 'Open a table')}</h2>
         </div>
         <div className="game-tiles">
-          <button
-            className="game-tile holdem"
-            onClick={() => {
-              setCreateType('holdem');
-              setSheet('create');
-            }}
-          >
-            <div className="tile-art">
-              <span className="mini-card r1">A♠</span>
-              <span className="mini-card r2 red">K♥</span>
-            </div>
-            <div className="tile-title">{tr('טקסס הולדם', "Texas Hold'em")}</div>
-            <div className="tile-sub">{tr('עד 10 שחקנים', 'Up to 10 players')}</div>
+          <button className="game-tile holdem" onClick={() => openCreate('holdem')}>
+            <span className="gt-felt" aria-hidden="true">
+              <span className="gp-card">A</span>
+              <span className="gp-card red">K</span>
+            </span>
+            <span className="gt-text">
+              <b>{tr('טקסס הולדם', "Texas Hold'em")}</b>
+              <small>{tr('עד 10 שחקנים', 'Up to 10 players')}</small>
+            </span>
           </button>
-          <button
-            className="game-tile blackjack"
-            onClick={() => {
-              setCreateType('blackjack');
-              setSheet('create');
-            }}
-          >
-            <div className="tile-art">
-              <span className="tile-21">21</span>
-            </div>
-            <div className="tile-title">{tr('בלאק ג׳ק', 'Blackjack')}</div>
-            <div className="tile-sub">{tr('מול הבית או בנק', 'House or friend bank')}</div>
+          <button className="game-tile blackjack" onClick={() => openCreate('blackjack')}>
+            <span className="gt-felt" aria-hidden="true">
+              <span className="gp-21">21</span>
+            </span>
+            <span className="gt-text">
+              <b>{tr('בלאק ג׳ק', 'Blackjack')}</b>
+              <small>{tr('מול הבית או חבר כבנק', 'House or a friend as bank')}</small>
+            </span>
           </button>
         </div>
         <button
@@ -248,13 +255,13 @@ export function Lobby({
             setSheet('join');
           }}
         >
-          <KeyRound size={18} /> {tr('הצטרפות עם קוד שולחן', 'Join with a table code')}
+          <KeyRound size={17} /> {tr('הצטרפות עם קוד שולחן', 'Join with a table code')}
         </button>
 
         {/* שולחנות פעילים */}
         <div className="section-head">
           <h2>
-            <Radio size={16} className="live-icon" /> {tr('שולחנות פעילים', 'Live tables')}
+            <span className="live-dot" aria-hidden="true" /> {tr('שולחנות פעילים', 'Live tables')}
           </h2>
           {rooms && rooms.length > 0 && <span className="count-pill">{rooms.length}</span>}
         </div>
@@ -264,7 +271,7 @@ export function Lobby({
             <div className="skeleton" />
           </div>
         )}
-        {rooms?.length === 0 && <div className="empty">{tr('אין שולחנות פעילים. פתחו אחד והזמינו את החבר׳ה!', 'No live tables. Open one and invite the crew!')}</div>}
+        {rooms?.length === 0 && <div className="empty">{tr('אין כרגע שולחנות פעילים. פתחו שולחן והזמינו את החבר׳ה.', 'No live tables right now. Open one and invite the crew.')}</div>}
         <div className="room-list">
           {rooms?.map((r) => {
             const humans = r.state.players.filter((p) => !p.isBot);
@@ -272,6 +279,7 @@ export function Lobby({
             const seated = r.state.players.some((p) => p.id === profile.id);
             const canRemove = r.state.hostId === profile.id || profile.is_admin;
             const go = () => (seated ? openTable(r.id) : openJoinByCode(r.code));
+            const lim = limitsOf(r);
             return (
               <div
                 key={r.id}
@@ -286,33 +294,35 @@ export function Lobby({
                   }
                 }}
               >
-                <div className={`room-badge ${r.game_type}`}>{r.game_type === 'blackjack' ? '21' : '♠'}</div>
+                <div className={`room-badge ${r.game_type}`} aria-hidden="true">
+                  {r.game_type === 'blackjack' ? '21' : '♠'}
+                </div>
                 <div className="grow">
                   <div className="room-name" dir="auto">
-                    {r.name}
+                    <span className="rn-text">{r.name}</span>
                     {r.money_mode === 'demo' && <span className="tag">{tr('אימון', 'Practice')}</span>}
                   </div>
                   <div className="room-sub room-facts">
                     <span>{gameName(r.game_type)}</span>
                     <span>
-                      <b>{limitsOf(r)}</b>
+                      {lim.l} <b dir="ltr">{lim.v}</b>
                     </span>
                     <span>
                       {tr('קנייה', 'Buy-in')} <b>{fmt(r.state.settings.buyIn)}</b>
                     </span>
                   </div>
                   <div className="avatar-stack">
-                    {humans.slice(0, 6).map((p) => (
-                      <Avatar key={p.id} name={p.name} size={24} className="stacked" />
+                    {humans.slice(0, 5).map((p) => (
+                      <Avatar key={p.id} name={p.name} size={22} className="stacked" />
                     ))}
                     <span className="players-count">
-                      <Users size={13} /> {humans.length}
-                      {bots > 0 && ` + ${bots} ${tr('בוטים', 'bots')}`}
+                      {count(humans.length, 'שחקן אחד', 'שחקנים', '1 player', 'players')}
+                      {bots > 0 && `, ${count(bots, 'בוט אחד', 'בוטים', '1 bot', 'bots')}`}
                     </span>
                   </div>
                 </div>
                 <div className="room-side">
-                  <div className="room-cta">{seated ? tr('חזרה', 'Back') : tr('הצטרפות', 'Join')}</div>
+                  <span className="room-cta">{seated ? tr('חזרה', 'Back') : tr('הצטרפות', 'Join')}</span>
                   {canRemove && (
                     <button
                       className="room-del"
@@ -332,22 +342,14 @@ export function Lobby({
         </div>
       </div>
 
-      <Sheet open={!!removing} onClose={() => setRemoving(null)} title={tr('הסרת השולחן', 'Remove the table')}>
-        {removing && (
-          <div className="confirm-remove">
-            <p dir="auto">
-              <b>{removing.name}</b>
-            </p>
-            <p>
-              {removing.money_mode === 'demo'
-                ? tr('שולחן אימון - הוא יימחק לגמרי, כולל ההיסטוריה שלו.', "Practice table - it's deleted completely, including its history.")
-                : tr(
-                    'שולחן כסף אמיתי - הוא ייסגר, כל שחקן יוצא עם הז׳טונים שיש לו עכשיו, והחובות מחושבים אוטומטית.',
-                    'Real-money table - it closes, everyone cashes out with their current chips, and debts are settled automatically.',
-                  )}
-            </p>
+      <Sheet
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        title={tr('הסרת השולחן', 'Remove the table')}
+        footer={
+          removing && (
             <div className="row-btns">
-              <button className="btn" onClick={() => setRemoving(null)}>
+              <button className="btn ghost" onClick={() => setRemoving(null)}>
                 {tr('ביטול', 'Cancel')}
               </button>
               <AsyncButton
@@ -362,40 +364,34 @@ export function Lobby({
                 {removing.money_mode === 'demo' ? tr('מחיקת השולחן', 'Delete table') : tr('סגירת השולחן', 'Close table')}
               </AsyncButton>
             </div>
+          )
+        }
+      >
+        {removing && (
+          <div className="confirm-remove">
+            <p dir="auto">
+              <b>{removing.name}</b>
+            </p>
+            <p>
+              {removing.money_mode === 'demo'
+                ? tr('שולחן אימון. הוא יימחק לגמרי, כולל ההיסטוריה שלו.', "Practice table. It's deleted completely, including its history.")
+                : tr(
+                    'שולחן כסף אמיתי. הוא ייסגר, כל שחקן יוצא עם הז׳טונים שיש לו עכשיו, והחובות מחושבים אוטומטית.',
+                    'Real-money table. It closes, everyone cashes out with their current chips, and debts are settled automatically.',
+                  )}
+            </p>
           </div>
         )}
       </Sheet>
 
       <CreateSheet open={sheet === 'create'} type={createType} setType={setCreateType} onClose={() => setSheet(null)} onCreated={openTable} myName={profile.name} />
 
-      <Sheet open={sheet === 'join'} onClose={() => setSheet(null)} title={tr('הצטרפות לשולחן', 'Join a table')}>
-        {!joinRoom ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              openJoinByCode(joinCode);
-            }}
-          >
-            <input className="input code-input" placeholder="ABCD" value={joinCode} maxLength={4} onChange={(e) => setJoinCode(e.target.value.toUpperCase())} autoFocus />
-            <button className="btn primary block big" disabled={joinCode.length !== 4}>
-              {tr('חיפוש שולחן', 'Find table')}
-            </button>
-          </form>
-        ) : (
-          <div className="join-box">
-            <div className={`room-badge big ${joinRoom.game_type}`}>{joinRoom.game_type === 'blackjack' ? '21' : '♠'}</div>
-            <b className="join-name" dir="auto">
-              {joinRoom.name}
-            </b>
-            <div className="room-sub">
-              {gameName(joinRoom.game_type)} · {limitsOf(joinRoom)}
-            </div>
-            <div className="room-sub">{joinRoom.money_mode === 'demo' ? tr('🎓 אימון - לא נספר בחובות', '🎓 Practice - not counted in debts') : tr('💰 כסף אמיתי - נרשם בחובות', '💰 Real money - recorded in debts')}</div>
-            <div className="buyin-amount">
-              <span className="chip-stack big" />
-              {fmt(joinRoom.state.settings.buyIn)}
-            </div>
-            <div className="hint center">{tr('קנייה קבועה בשולחן הזה', 'Fixed buy-in at this table')}</div>
+      <Sheet
+        open={sheet === 'join'}
+        onClose={() => setSheet(null)}
+        title={joinRoom ? joinRoom.name : tr('הצטרפות עם קוד', 'Join with a code')}
+        footer={
+          joinRoom && (
             <AsyncButton
               className="btn primary block big"
               onClick={async () => {
@@ -406,143 +402,64 @@ export function Lobby({
             >
               {tr(`התיישבות ב-${fmt(joinRoom.state.settings.buyIn)}`, `Sit down for ${fmt(joinRoom.state.settings.buyIn)}`)}
             </AsyncButton>
+          )
+        }
+      >
+        {!joinRoom ? (
+          <form
+            className="code-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              openJoinByCode(joinCode);
+            }}
+          >
+            <p className="hint">{tr('את הקוד (4 אותיות) רואים בראש השולחן אצל מי שפתח אותו.', 'The 4-letter code is shown at the top of the table.')}</p>
+            <input
+              className="input code-input"
+              placeholder="ABCD"
+              value={joinCode}
+              maxLength={4}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              aria-label={tr('קוד שולחן', 'Table code')}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              autoFocus
+            />
+            <button className="btn primary block big" disabled={joinCode.length !== 4}>
+              {tr('חיפוש שולחן', 'Find table')}
+            </button>
+          </form>
+        ) : (
+          <div className="join-box">
+            <div className="facts">
+              <div>
+                <span>{tr('משחק', 'Game')}</span>
+                <b>{gameName(joinRoom.game_type)}</b>
+              </div>
+              <div>
+                <span>{limitsOf(joinRoom).l}</span>
+                <b className="num" dir="ltr">
+                  {limitsOf(joinRoom).v}
+                </b>
+              </div>
+              <div>
+                <span>{tr('שחקנים', 'Players')}</span>
+                <b className="num">{joinRoom.state.players.length}</b>
+              </div>
+              <div>
+                <span>{tr('סוג', 'Type')}</span>
+                <b>{joinRoom.money_mode === 'demo' ? tr('אימון, לא נספר בחובות', 'Practice, not in debts') : tr('כסף אמיתי, נרשם בחובות', 'Real money, recorded')}</b>
+              </div>
+            </div>
+            <div className="buyin-amount">
+              <ChipStack amount={joinRoom.state.settings.buyIn} size={26} label={false} />
+              <span>{fmt(joinRoom.state.settings.buyIn)}</span>
+            </div>
+            <div className="hint center">{tr('קנייה קבועה בשולחן הזה', 'Fixed buy-in at this table')}</div>
           </div>
         )}
       </Sheet>
     </div>
-  );
-}
-
-function CreateSheet({
-  open,
-  type,
-  setType,
-  onClose,
-  onCreated,
-  myName,
-}: {
-  open: boolean;
-  type: 'holdem' | 'blackjack';
-  setType: (t: 'holdem' | 'blackjack') => void;
-  onClose: () => void;
-  onCreated: (id: string) => void;
-  myName: string;
-}) {
-  const { tr } = useI18n();
-  const [money, setMoney] = useState<'real' | 'demo'>('real');
-  const [name, setName] = useState('');
-  const [buyIn, setBuyIn] = useState(200);
-  const [bb, setBb] = useState(2);
-  const [blindUp, setBlindUp] = useState(0);
-  const [minBet, setMinBet] = useState(10);
-  const [maxBet, setMaxBet] = useState(200);
-  const [dealerMode, setDealerMode] = useState<'house' | 'player'>('house');
-  const [bots, setBots] = useState(0);
-  const [turnSeconds, setTurnSeconds] = useState(45);
-  const [maxRebuys, setMaxRebuys] = useState<number | null>(null);
-  const defaultName = tr(`השולחן של ${myName}`, `${myName}'s table`);
-
-  return (
-    <Sheet open={open} onClose={onClose} title={tr('שולחן חדש', 'New table')}>
-      <div className="seg big">
-        <button className={type === 'holdem' ? 'active' : ''} onClick={() => setType('holdem')}>
-          ♠ {tr('טקסס הולדם', "Texas Hold'em")}
-        </button>
-        <button className={type === 'blackjack' ? 'active' : ''} onClick={() => setType('blackjack')}>
-          21 {tr('בלאק ג׳ק', 'Blackjack')}
-        </button>
-      </div>
-      <div className="seg">
-        <button className={money === 'real' ? 'active' : ''} onClick={() => setMoney('real')}>
-          {tr('💰 כסף אמיתי', '💰 Real money')}
-        </button>
-        <button className={money === 'demo' ? 'active' : ''} onClick={() => setMoney('demo')}>
-          {tr('🎓 אימון', '🎓 Practice')}
-        </button>
-      </div>
-      <p className="hint">
-        {money === 'real'
-          ? tr('כל קנייה ויציאה נרשמות, ובסוף הערב מקבלים קיזוז חובות.', 'Every buy-in and cash-out is recorded, and at the end of the night you get a settle-up.')
-          : tr('כסף משחק בלבד - לא נספר בחובות ובדירוג.', 'Play money only - not counted in debts or rankings.')}
-      </p>
-      <label>
-        {tr('שם השולחן', 'Table name')}
-        <input className="input" value={name} placeholder={defaultName} onChange={(e) => setName(e.target.value)} maxLength={30} />
-      </label>
-      <div className="label">{tr('קנייה קבועה (כולם נכנסים באותו סכום)', 'Fixed buy-in (everyone buys in for the same amount)')}</div>
-      <NumberStepper value={buyIn} onChange={setBuyIn} step={50} min={10} />
-      {type === 'holdem' ? (
-        <>
-          <div className="label">{tr('ביג בליינד (הסמול = חצי)', 'Big blind (small = half)')}</div>
-          <NumberStepper value={bb} onChange={setBb} step={2} min={2} />
-          <div className="label">{tr('בליינדים עולים (כמו בטורניר)', 'Rising blinds (tournament style)')}</div>
-          <div className="seg">
-            {[0, 10, 15, 20, 30].map((m) => (
-              <button key={m} className={blindUp === m ? 'active' : ''} onClick={() => setBlindUp(m)}>
-                {m === 0 ? tr('קבועים', 'Fixed') : tr(`כל ${m} ד׳`, `${m} min`)}
-              </button>
-            ))}
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="label">{tr('הימור מינימום / מקסימום', 'Minimum / maximum bet')}</div>
-          <div className="row gap">
-            <NumberStepper value={minBet} onChange={setMinBet} step={5} min={1} />
-            <NumberStepper value={maxBet} onChange={setMaxBet} step={50} min={minBet} />
-          </div>
-          <div className="label">{tr('מי הדילר?', 'Who is the dealer?')}</div>
-          <div className="seg">
-            <button className={dealerMode === 'house' ? 'active' : ''} onClick={() => setDealerMode('house')}>
-              {tr('🖥️ המחשב', '🖥️ The computer')}
-            </button>
-            <button className={dealerMode === 'player' ? 'active' : ''} onClick={() => setDealerMode('player')}>
-              {tr('🏦 חבר כבנק', '🏦 A friend (bank)')}
-            </button>
-          </div>
-        </>
-      )}
-      <div className="label">{tr('קניות חוזרות לכל שחקן', 'Rebuys per player')}</div>
-      <div className="seg">
-        {[null, 0, 1, 2, 3].map((n) => (
-          <button key={String(n)} className={maxRebuys === n ? 'active' : ''} onClick={() => setMaxRebuys(n)}>
-            {n === null ? tr('ללא הגבלה', 'Unlimited') : n === 0 ? tr('בלי', 'None') : n}
-          </button>
-        ))}
-      </div>
-      <div className="label">{tr('זמן לכל תור', 'Time per turn')}</div>
-      <div className="seg">
-        {[30, 45, 60, 90].map((n) => (
-          <button key={n} className={turnSeconds === n ? 'active' : ''} onClick={() => setTurnSeconds(n)}>
-            {n}
-            {tr(' שנ׳', 's')}
-          </button>
-        ))}
-      </div>
-      <div className="label">{tr('בוטים (שחקני מחשב)', 'Bots (computer players)')}</div>
-      <div className="seg">
-        {[0, 1, 2, 3].map((n) => (
-          <button key={n} className={bots === n ? 'active' : ''} onClick={() => setBots(n)}>
-            {n === 0 ? tr('בלי', 'None') : `${n} 🤖`}
-          </button>
-        ))}
-      </div>
-      <AsyncButton
-        className="btn primary block big"
-        onClick={async () => {
-          const settings =
-            type === 'holdem'
-              ? { bb, buyIn, turnSeconds, blindUpMinutes: blindUp, maxRebuys }
-              : { minBet, maxBet, buyIn, dealerMode, turnSeconds, maxRebuys };
-          const r = await gameCall<{ roomId: string; code: string }>({ op: 'create', gameType: type, name: name.trim() || defaultName, moneyMode: money, settings });
-          for (let i = 0; i < bots; i++) await gameCall({ op: 'act', roomId: r.roomId, move: { type: 'addBot' } });
-          onClose();
-          onCreated(r.roomId);
-          toast(tr(`השולחן נפתח! קוד: ${r.code}`, `Table opened! Code: ${r.code}`), 'win');
-        }}
-      >
-        {tr('פתיחת שולחן', 'Open table')}
-      </AsyncButton>
-    </Sheet>
   );
 }

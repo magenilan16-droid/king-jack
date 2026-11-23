@@ -4,13 +4,14 @@ import { supabase, fetchProfile, type Profile } from './lib/supabase';
 import { useThemePref, useTipsPref, vibrate } from './lib/prefs';
 import { refreshPushIfGranted } from './lib/push';
 import { useI18n } from './lib/i18n';
-import { Toaster, Sheet, toast } from './components/ui';
+import { Toaster, Sheet } from './components/ui';
 import { Login } from './screens/Login';
 import { Lobby } from './screens/Lobby';
 import { Table } from './screens/Table';
 import { Stats } from './screens/Stats';
 import { Install } from './screens/Install';
 import { Debts } from './screens/Debts';
+import { Avatar } from './components/Avatar';
 import { Admin } from './screens/Admin';
 import { ProfileScreen } from './screens/Profile';
 import { BottomNav, type Tab } from './components/BottomNav';
@@ -232,16 +233,16 @@ export default function App() {
     <>
       {screen}
       {showNav && <BottomNav tab={route.name as Tab} onTab={(t) => setRoute({ name: t } as Route)} debtBadge={debtCount} />}
-      <Sheet open={!!invite} onClose={() => invite && (markSeen(invite.id), setInvite(null))} title={tr('🔔 הזמנה למשחק!', '🔔 Game invite!')}>
+      <Sheet open={!!invite} onClose={() => invite && (markSeen(invite.id), setInvite(null))} title={tr('הזמנה למשחק', 'Game invite')}>
         {invite && (
           <div className="invite-pop">
-            <div className="big-avatar">{invite.fromAvatar}</div>
+            <Avatar name={invite.fromName} emoji={invite.fromAvatar} size={64} />
             <p>
-              <b>{invite.fromName}</b> {tr('מזמין/ה אותך לשבת ב:', 'invites you to join:')}
+              <b>{invite.fromName}</b> {tr('מזמין/ה אותך לשבת בשולחן', 'invites you to the table')}
               <br />
-              <b>"{invite.roomName}"</b>
+              <b dir="auto">{invite.roomName}</b>
             </p>
-            <div className="btn-grid two">
+            <div className="row-btns">
               <button
                 className="btn ghost"
                 onClick={() => {
@@ -259,10 +260,10 @@ export default function App() {
                   if (route.name === 'table' && route.roomId === invite.room_id) return;
                   setPendingJoin(invite.code);
                   setRoute({ name: 'lobby' });
-                  toast(tr('יאללה! 🃏', "Let's go! 🃏"));
+                  
                 }}
               >
-                {tr('בואו נשחק! 🃏', "Let's play! 🃏")}
+                {tr('להצטרף', 'Join')}
               </button>
             </div>
           </div>

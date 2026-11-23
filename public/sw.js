@@ -1,5 +1,5 @@
 // Service Worker: התראות פוש + שמירת האפליקציה במטמון לטעינה מהירה
-const CACHE = 'king-jack-v3';
+const CACHE = 'king-jack-v4';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {
@@ -45,7 +45,7 @@ self.addEventListener('push', (e) => {
   e.waitUntil(
     self.registration.showNotification(title, {
       body: d.body || '',
-      icon: 'icons/icon-192.png',
+      icon: 'icons/kj-192.png',
       badge: 'icons/badge-96.png',
       data: { url: d.url || './' },
       tag: d.tag || undefined,

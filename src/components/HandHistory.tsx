@@ -66,7 +66,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
       ? tr(`${name(winners[0]?.id)} לקח/ה את הקופה - כל השאר קיפלו`, `${name(winners[0]?.id)} took the pot - everyone else folded`)
       : winners
           .map((w) => tr(`${name(w.id)} ניצח/ה עם ${handName(w.cat, lang)}`, `${name(w.id)} won with ${handName(w.cat, lang)}`))
-          .join(' · ');
+          .join(', ');
   const losers = rec.players.filter((p) => p.shown && !winners.some((w) => w.id === p.id));
   // מהלכים לפי שלבים
   const streets: Record<string, typeof rec.log> = {};
@@ -78,10 +78,18 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
         <span className="hh-no">#{rec.no}</span>
         <div className="grow">
           <div className="hh-win">
-            <Trophy size={15} /> {winners.map((w) => `${byId.get(w.id)?.avatar ?? ''} ${name(w.id)} +${fmt(w.amount)}`).join(' · ')}
+            <Trophy size={15} /> {winners.map((w) => `${name(w.id)} +${fmt(w.amount)}`).join(', ')}
           </div>
           <div className="sub">
-            {timeFmt(at, lang)} · {tr('קופה', 'Pot')} {fmt(rec.pot)} · {tr('בליינדים', 'Blinds')} {rec.blinds[0]}/{rec.blinds[1]}
+            <span className="facts-line">
+              <span>{timeFmt(at, lang)}</span>
+              <span>
+                {tr('קופה', 'Pot')} {fmt(rec.pot)}
+              </span>
+              <span>
+                {tr('בליינדים', 'Blinds')} <span dir="ltr">{rec.blinds[0]}/{rec.blinds[1]}</span>
+              </span>
+            </span>
           </div>
         </div>
         <ChevronDown size={18} className={`chev-i ${open ? 'up' : ''}`} />
@@ -101,7 +109,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
               <span className="avatar">{p.avatar}</span>
               <span className="grow" dir="auto">
                 {displayName(p, lang)}
-                <span className="sub"> · {handName(p.cat, lang)}</span>
+                <span className="sub"> {handName(p.cat, lang)}</span>
               </span>
               {p.shown && <Hand cards={p.shown} size="sm" />}
               <b className={p.net > 0 ? 'pos' : p.net < 0 ? 'neg' : ''}>
@@ -118,7 +126,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
             .map((p) => (
               <div key={p.id} className="hh-player">
                 <span className="avatar">{p.avatar}</span>
-                <span className="grow">{tr(`${displayName(p, lang)} הראה/תה 👀`, `${displayName(p, lang)} showed 👀`)}</span>
+                <span className="grow">{tr(`${displayName(p, lang)} הראה/תה`, `${displayName(p, lang)} showed`)}</span>
                 <Hand cards={p.shown!} size="sm" />
               </div>
             ))}
@@ -140,7 +148,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
           {Object.entries(streets).map(([st, list]) => (
             <div key={st} className="hh-street">
               <b>{streetName(st, lang)}</b>
-              <span>{list.map((e) => `${name(e.id)}: ${actionLabel(e.a, lang)}`).join(' · ')}</span>
+              <span>{list.map((e) => `${name(e.id)}: ${actionLabel(e.a, lang)}`).join(', ')}</span>
             </div>
           ))}
           {rec.players.some((p) => p.net !== 0) && (
@@ -150,7 +158,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
                 {rec.players
                   .filter((p) => p.net !== 0)
                   .map((p) => `${name(p.id)} ${signed(p.net)}`)
-                  .join(' · ')}
+                  .join(', ')}
               </span>
             </div>
           )}
@@ -171,7 +179,7 @@ function BlackjackCard({ rec, at, myId }: { rec: BlackjackHandRecord; at: string
         <span className="hh-no">#{rec.no}</span>
         <div className="grow">
           <div className="hh-win">
-            🎩 {tr('דילר', 'Dealer')}: {rec.dealerTotal > 21 ? tr(`נשרף (${rec.dealerTotal}) 💥`, `bust (${rec.dealerTotal}) 💥`) : rec.dealerTotal}
+            {tr('דילר', 'Dealer')} {rec.dealerTotal > 21 ? tr(`נשרף (${rec.dealerTotal})`, `bust (${rec.dealerTotal})`) : rec.dealerTotal}
           </div>
           <div className="sub">{timeFmt(at, lang)}</div>
         </div>
@@ -183,7 +191,7 @@ function BlackjackCard({ rec, at, myId }: { rec: BlackjackHandRecord; at: string
             <span className="avatar">{p.avatar}</span>
             <span className="grow" dir="auto">
               {displayName(p, lang)}
-              <span className="sub"> · {p.hands.map((h) => (lang === 'he' ? resultHe : resultEn)[h.result ?? ''] ?? '').join(' / ')}</span>
+              <span className="sub"> {p.hands.map((h) => (lang === 'he' ? resultHe : resultEn)[h.result ?? ''] ?? '').join(' / ')}</span>
             </span>
             {p.hands.map((h, i) => (
               <Hand key={i} cards={h.cards} size="sm" />

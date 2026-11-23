@@ -18,6 +18,7 @@ import {
   Play,
   Timer as TimerIcon,
   Crown,
+  X,
 } from 'lucide-react';
 import { useRoom } from '../lib/useRoom';
 import { gameCall, type Profile } from '../lib/supabase';
@@ -32,6 +33,7 @@ import { useRoomFx, THROWABLES, EMOTES } from '../lib/fx';
 import { canRebuyNow, rebuysLeft } from '../engine/room';
 import { Sheet, AsyncButton, toast } from '../components/ui';
 import { Settle } from '../components/Settle';
+import { ChipStack } from '../components/Chips';
 import { ChatSheet, useChatNotifier } from '../components/Chat';
 import { InviteSheet } from '../components/InviteSheet';
 import { HandHistory } from '../components/HandHistory';
@@ -135,18 +137,18 @@ export function Table({
         </header>
         <div className="content">
           <div className="closed-banner">
-            <Flag size={18} /> {tr('השולחן נסגר - הנה הסיכום', 'The table is closed - here is the summary')}
+            <Flag size={18} /> {tr('השולחן נסגר. זה הסיכום של הערב.', 'The table is closed. Here is the night summary.')}
           </div>
-          <div className="seg">
-            <button className={closedTab === 'settle' ? 'active' : ''} onClick={() => setClosedTab('settle')}>
+          <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={closedTab === 'settle'} className={closedTab === 'settle' ? 'active' : ''} onClick={() => setClosedTab('settle')}>
               {tr('מאזן וחובות', 'Balance & debts')}
             </button>
-            <button className={closedTab === 'hands' ? 'active' : ''} onClick={() => setClosedTab('hands')}>
+            <button role="tab" aria-selected={closedTab === 'hands'} className={closedTab === 'hands' ? 'active' : ''} onClick={() => setClosedTab('hands')}>
               {tr('היסטוריית ידיים', 'Hand history')}
             </button>
           </div>
           {closedTab === 'settle' ? <Settle room={room} ledger={ledger} moneyMode={moneyMode} /> : <HandHistory roomId={roomId} myId={myId} />}
-          <button className="btn primary block" onClick={onExit}>
+          <button className="btn primary block big" onClick={onExit}>
             {tr('חזרה ללובי', 'Back to lobby')}
           </button>
         </div>
@@ -162,7 +164,7 @@ export function Table({
   const turnId = hd ? hd.turnId : bj && bj.phase === 'playing' && bj.turn ? bj.players[bj.turn.p]?.id : null;
   const onSeatTap = (id: string) => {
     if (id === myId) return;
-    if (!me) return toast(tr('צריך לשבת בשולחן כדי להתגרות 😉', 'Sit down to start the banter 😉'));
+    if (!me) return toast(tr('צריך לשבת בשולחן כדי להתגרות', 'Sit down to start the banter'));
     setTarget(id);
   };
 
@@ -202,7 +204,7 @@ export function Table({
         </div>
       </header>
 
-      {!connected && <div className="offline-banner">{tr('🔄 החיבור נפל - מתחבר מחדש...', '🔄 Connection lost - reconnecting...')}</div>}
+      {!connected && <div className="offline-banner">{tr('החיבור נפל, מתחברים מחדש…', 'Connection lost, reconnecting…')}</div>}
       <div className="quip-ribbon" key={quip}>
         {quip}
       </div>
@@ -237,7 +239,7 @@ export function Table({
       </main>
       {!me && (
         <div className="spectator-bar">
-          <span>{tr('👀 אתם צופים בשולחן', "👀 You're watching")}</span>
+          <span>{tr('אתם צופים בשולחן', "You're watching")}</span>
           <button className="btn primary" onClick={() => setSheet('join')}>
             {tr(`הצטרפות ב-${fmt(buyIn)}`, `Join for ${fmt(buyIn)}`)}
           </button>
@@ -247,13 +249,13 @@ export function Table({
       <FxLayer events={events} chatBubble={bubble} />
 
       {/* תפריט שחקן: זריקה וזירוז */}
-      <Sheet open={!!targetP} onClose={() => setTarget(null)} title={targetP ? `${targetP.avatar} ${displayName(targetP, lang)}` : ''}>
+      <Sheet open={!!targetP} onClose={() => setTarget(null)} title={targetP ? displayName(targetP, lang) : ''}>
         {targetP && (
           <div className="player-menu">
             <div className="pm-chips">
               <Coins size={16} /> {fmt(targetP.chips)}
             </div>
-            <div className="label">{tr('זרקו משהו 😈', 'Throw something 😈')}</div>
+            <div className="label">{tr('לזרוק משהו', 'Throw something')}</div>
             <div className="throw-grid">
               {THROWABLES.map((it) => (
                 <button
@@ -274,11 +276,11 @@ export function Table({
                 onClick={async () => {
                   await gameCall({ op: 'nudge', roomId, userId: targetP.id });
                   send({ kind: 'nudge', to: targetP.id });
-                  toast(tr(`זירזת את ${targetP.name} ⏰`, `You nudged ${targetP.name} ⏰`), 'win');
+                  toast(tr(`זירזת את ${targetP.name}`, `You nudged ${targetP.name}`), 'win');
                   setTarget(null);
                 }}
               >
-                <TimerIcon size={18} /> {tr('זרז אותו/ה! (נשלחת התראה)', 'Nudge! (sends a notification)')}
+                <TimerIcon size={18} /> {tr('זירוז (נשלחת התראה)', 'Nudge (sends a notification)')}
               </AsyncButton>
             )}
           </div>
@@ -301,7 +303,7 @@ export function Table({
             </button>
           ))}
         </div>
-        <p className="hint center">{tr('טיפ: לחיצה על חבר בשולחן = לזרוק עליו משהו 🍅', 'Tip: tap a friend at the table to throw something 🍅')}</p>
+        <p className="hint center">{tr('לחיצה על חבר בשולחן פותחת זריקה וזירוז.', 'Tap a friend at the table to throw something or nudge.')}</p>
       </Sheet>
 
       {/* תפריט */}
@@ -310,14 +312,17 @@ export function Table({
           {me && (
             <button className="menu-item" onClick={() => setSheet('rebuy')}>
               <span className="mi">
-                <Coins size={19} /> {tr(`קנייה חוזרת (${fmt(buyIn)})`, `Rebuy (${fmt(buyIn)})`)}
+                <Coins size={19} /> {tr(`קנייה חוזרת ב-${fmt(buyIn)}`, `Rebuy for ${fmt(buyIn)}`)}
               </span>
-              <span className="sub">{left == null ? tr('ללא הגבלה', 'unlimited') : tr(`נשארו ${left}`, `${left} left`)}</span>
+              <span className="sub">{left == null ? tr('ללא הגבלה', 'Unlimited') : tr(`נשארו ${left}`, `${left} left`)}</span>
             </button>
           )}
           <button className="menu-item" onClick={() => setSheet('invite')}>
             <span className="mi">
               <UserPlus size={19} /> {tr('הזמנת חברים', 'Invite friends')}
+            </span>
+            <span className="sub num" translate="no">
+              {room.code}
             </span>
           </button>
           <button className="menu-item" onClick={() => setSheet('settle')}>
@@ -329,43 +334,50 @@ export function Table({
             <button className="menu-item" onClick={() => actSafe({ type: 'sitOut', value: !(me as HState['players'][number]).sitOut })}>
               <span className="mi">
                 {(me as HState['players'][number]).sitOut ? <Play size={19} /> : <Coffee size={19} />}
-                {(me as HState['players'][number]).sitOut ? tr('חזרה למשחק', 'Back in the game') : tr('הפסקה (לדלג על ידיים)', 'Take a break (skip hands)')}
+                {(me as HState['players'][number]).sitOut ? tr('חזרה למשחק', 'Back in the game') : tr('הפסקה (מדלגים על ידיים)', 'Take a break (skip hands)')}
               </span>
             </button>
           )}
+        </div>
+
+        <div className="list-label">{tr('הגדרות', 'Settings')}</div>
+        <div className="menu-list">
           <label className="menu-item toggle">
             <span className="mi">
-              <Lightbulb size={19} /> {tr('טיפים חכמים', 'Smart tips')}
+              <Lightbulb size={19} /> {tr('טיפים', 'Tips')}
             </span>
-            <input type="checkbox" checked={tipsOn} onChange={(e) => setTipsOn(e.target.checked)} />
+            <input type="checkbox" role="switch" checked={tipsOn} onChange={(e) => setTipsOn(e.target.checked)} />
           </label>
           <label className="menu-item toggle">
             <span className="mi">
               <Volume2 size={19} /> {tr('צלילים', 'Sounds')}
             </span>
-            <input type="checkbox" checked={!muted} onChange={(e) => setMuted(!e.target.checked)} />
+            <input type="checkbox" role="switch" checked={!muted} onChange={(e) => setMuted(!e.target.checked)} />
           </label>
-          <div className="seg">
-            <button className={lang === 'he' ? 'active' : ''} onClick={() => setLang('he')}>
-              עברית
+        </div>
+        <div className="seg" role="group" aria-label={tr('שפה', 'Language')}>
+          <button className={lang === 'he' ? 'active' : ''} aria-pressed={lang === 'he'} onClick={() => setLang('he')}>
+            עברית
+          </button>
+          <button className={lang === 'en' ? 'active' : ''} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>
+            English
+          </button>
+        </div>
+        <div className="theme-picker">
+          {themes.map((t) => (
+            <button key={t.id} className={`theme-opt ${t.id === theme.id ? 'active' : ''}`} aria-pressed={t.id === theme.id} onClick={() => setTheme(t.id)}>
+              <span aria-hidden="true">{t.emoji}</span>
+              {t.name}
             </button>
-            <button className={lang === 'en' ? 'active' : ''} onClick={() => setLang('en')}>
-              English
-            </button>
-          </div>
-          <div className="theme-picker">
-            {themes.map((t) => (
-              <button key={t.id} className={`theme-opt ${t.id === theme.id ? 'active' : ''}`} onClick={() => setTheme(t.id)}>
-                <span>{t.emoji}</span>
-                {t.name}
-              </button>
-            ))}
-          </div>
-          {isHost && (
-            <>
-              <h3 className="section-title">
-                <Crown size={16} /> {tr('ניהול (מארח)', 'Host controls')}
-              </h3>
+          ))}
+        </div>
+
+        {isHost && (
+          <>
+            <div className="list-label">
+              <Crown size={14} /> {tr('ניהול השולחן', 'Host controls')}
+            </div>
+            <div className="menu-list">
               <AsyncButton className="menu-item" onClick={() => act({ type: 'addBot' })}>
                 <span className="mi">
                   <Bot size={19} /> {tr('הוספת בוט', 'Add a bot')}
@@ -374,20 +386,25 @@ export function Table({
               {bots.map((b) => (
                 <AsyncButton key={b.id} className="menu-item" onClick={() => act({ type: 'removeBot', botId: b.id })}>
                   <span className="mi">
-                    ✕ {tr('הסרת', 'Remove')} {b.avatar} {displayName(b, lang)}
+                    <X size={19} /> {tr(`הסרת ${displayName(b, lang)}`, `Remove ${displayName(b, lang)}`)}
                   </span>
                 </AsyncButton>
               ))}
               {bj && bj.settings.dealerMode === 'player' && (
-                <div className="banker-pick">
-                  <span>{tr('🏦 מי הבנק?', '🏦 Who is the bank?')}</span>
-                  <select value={bj.bankerId ?? ''} onChange={(e) => actSafe({ type: 'setBanker', playerId: e.target.value || null })} disabled={bj.phase === 'playing'}>
+                <div className="menu-item banker-pick">
+                  <span>{tr('מי הבנק', 'Who is the bank')}</span>
+                  <select
+                    value={bj.bankerId ?? ''}
+                    aria-label={tr('מי הבנק', 'Who is the bank')}
+                    onChange={(e) => actSafe({ type: 'setBanker', playerId: e.target.value || null })}
+                    disabled={bj.phase === 'playing'}
+                  >
                     <option value="">{tr('המחשב (הבית)', 'The computer (house)')}</option>
                     {bj.players
                       .filter((p) => !p.isBot)
                       .map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.avatar} {p.name}
+                          {p.name}
                         </option>
                       ))}
                   </select>
@@ -403,12 +420,14 @@ export function Table({
                 }}
               >
                 <span className="mi">
-                  <Flag size={19} /> {tr('סיום ערב וסגירת השולחן', 'End the night & close the table')}
+                  <Flag size={19} /> {tr('סיום הערב וסגירת השולחן', 'End the night and close the table')}
                 </span>
               </AsyncButton>
-            </>
-          )}
-          {me && (
+            </div>
+          </>
+        )}
+        {me && (
+          <div className="menu-list">
             <AsyncButton
               className="menu-item danger"
               onClick={async () => {
@@ -435,8 +454,8 @@ export function Table({
                 <LogOut size={19} /> {tr('לקום מהשולחן', 'Leave the table')}
               </span>
             </AsyncButton>
-          )}
-        </div>
+          </div>
+        )}
       </Sheet>
 
       <Sheet open={sheet === 'settle'} onClose={() => setSheet(null)} title={tr('מאזן וחובות', 'Balance & debts')}>
@@ -452,19 +471,43 @@ export function Table({
       <InviteSheet open={sheet === 'invite'} onClose={() => setSheet(null)} roomId={roomId} code={room.code} roomName={room.name} seatedIds={s.players.map((p) => p.id)} myId={myId} />
 
       {/* קנייה: תמיד בסכום הקבוע של השולחן */}
-      <Sheet open={sheet === 'rebuy' || sheet === 'join'} onClose={() => setSheet(null)} title={sheet === 'join' ? tr('הצטרפות לשולחן', 'Join the table') : tr('קנייה חוזרת', 'Rebuy')}>
+      <Sheet
+        open={sheet === 'rebuy' || sheet === 'join'}
+        onClose={() => setSheet(null)}
+        title={sheet === 'join' ? tr('הצטרפות לשולחן', 'Join the table') : tr('קנייה חוזרת', 'Rebuy')}
+        footer={
+          <AsyncButton
+            className="btn primary block big"
+            disabled={sheet === 'rebuy' && !canRebuy}
+            onClick={async () => {
+              if (sheet === 'join') await gameCall({ op: 'join', code: room.code });
+              else await gameCall({ op: 'act', roomId, move: { type: 'rebuy' } });
+              await refresh();
+              setSheet(null);
+              sfx.chipStack();
+              toast(tr(`נוספו ${fmt(buyIn)} ז׳טונים`, `Added ${fmt(buyIn)} chips`), 'win');
+            }}
+          >
+            {sheet === 'join' ? tr(`התיישבות ב-${fmt(buyIn)}`, `Sit down for ${fmt(buyIn)}`) : tr(`קנייה ב-${fmt(buyIn)}`, `Buy ${fmt(buyIn)}`)}
+          </AsyncButton>
+        }
+      >
         <div className="buyin-box">
           <div className="buyin-amount">
-            <span className="chip-stack big" />
-            {fmt(buyIn)}
+            <ChipStack amount={buyIn} size={26} label={false} />
+            <span>{fmt(buyIn)}</span>
           </div>
-          <div className="hint center">
-            {tr('בשולחן הזה הקנייה קבועה', 'This table has a fixed buy-in')}
-            {moneyMode === 'demo' ? tr(' · אימון - לא כסף אמיתי 🎓', ' · practice - not real money 🎓') : tr(' · נרשם ביומן החובות 💰', ' · recorded in the debt ledger 💰')}
+          <div className="hint center">{tr('בשולחן הזה הקנייה קבועה', 'This table has a fixed buy-in')}</div>
+        </div>
+        <div className="facts">
+          <div>
+            <span>{tr('סוג', 'Type')}</span>
+            <b>{moneyMode === 'demo' ? tr('אימון, לא כסף אמיתי', 'Practice, not real money') : tr('כסף אמיתי, נרשם בחובות', 'Real money, recorded in debts')}</b>
           </div>
           {sheet === 'rebuy' && (
-            <div className="hint center">
-              {left == null ? tr('קניות חוזרות: ללא הגבלה', 'Rebuys: unlimited') : tr(`קניות חוזרות שנשארו: ${left}`, `Rebuys left: ${left}`)}
+            <div>
+              <span>{tr('קניות חוזרות', 'Rebuys')}</span>
+              <b>{left == null ? tr('ללא הגבלה', 'Unlimited') : tr(`נשארו ${left}`, `${left} left`)}</b>
             </div>
           )}
         </div>
@@ -473,20 +516,6 @@ export function Table({
             {left === 0 ? tr('נגמרו הקניות החוזרות בשולחן הזה', 'No rebuys left at this table') : tr('אפשר לקנות שוב רק כשנגמרים הז׳טונים', 'You can rebuy only when you run out of chips')}
           </div>
         )}
-        <AsyncButton
-          className="btn primary block big"
-          disabled={sheet === 'rebuy' && !canRebuy}
-          onClick={async () => {
-            if (sheet === 'join') await gameCall({ op: 'join', code: room.code });
-            else await gameCall({ op: 'act', roomId, move: { type: 'rebuy' } });
-            await refresh();
-            setSheet(null);
-            sfx.chipStack();
-            toast(tr(`נוספו ${fmt(buyIn)} 💰`, `Added ${fmt(buyIn)} 💰`), 'win');
-          }}
-        >
-          {sheet === 'join' ? tr(`התיישבות ב-${fmt(buyIn)}`, `Sit down for ${fmt(buyIn)}`) : tr(`קנייה ב-${fmt(buyIn)}`, `Buy ${fmt(buyIn)}`)}
-        </AsyncButton>
       </Sheet>
     </div>
   );

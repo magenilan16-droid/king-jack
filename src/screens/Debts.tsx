@@ -1,5 +1,6 @@
 // לוח חובות: מה פתוח בין כל הערבים, סימון "שולם", וקיזוז כולל
 import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, ArrowRight, MessageCircle, ShieldCheck } from 'lucide-react';
 import { supabase, gameCall, type Profile } from '../lib/supabase';
 import { settle } from '../engine/settle';
 import { fmt } from '../lib/balances';
@@ -19,7 +20,7 @@ interface DebtRow {
 
 const KITTY = 'kitty';
 
-export function Debts({ profile, onBack }: { profile: Profile; onBack: () => void }) {
+export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
   const { tr, lang } = useI18n();
   const [tab, setTab] = useState<'mine' | 'all' | 'paid'>('mine');
   const [debts, setDebts] = useState<DebtRow[] | null>(null);
@@ -51,11 +52,11 @@ export function Debts({ profile, onBack }: { profile: Profile; onBack: () => voi
     };
   }, [load]);
 
-  const who = (id: string | null) =>
-    id ? (people[id] ? `${people[id].avatar} ${people[id].name}` : '?') : tr('🏦 הקופה', '🏦 The Kitty');
+  const who = (id: string | null) => (id ? (people[id]?.name ?? '?') : tr('הקופה', 'The Kitty'));
+  const whoText = (id: string | null) => (id ? (people[id] ? `${people[id].avatar} ${people[id].name}` : '?') : tr('הקופה', 'The Kitty'));
   const dateFmt = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'short' }) : '';
-  const arrow = lang === 'he' ? '←' : '→';
+  const Arrow = lang === 'he' ? ArrowLeft : ArrowRight;
 
   const open = (debts ?? []).filter((d) => !d.paid);
   const paid = (debts ?? []).filter((d) => d.paid);
@@ -77,17 +78,17 @@ export function Debts({ profile, onBack }: { profile: Profile; onBack: () => voi
   const mark = async (d: DebtRow, value: boolean) => {
     const { error } = await supabase.rpc('game_mark_debt', { p_id: d.id, p_paid: value });
     if (error) throw new Error(tr('אין הרשאה', 'Not allowed'));
-    toast(value ? tr('סומן כשולם ✔', 'Marked as paid ✔') : tr('הסימון בוטל', 'Unmarked'), 'win');
+    toast(value ? tr('סומן כשולם', 'Marked as paid') : tr('הסימון בוטל', 'Unmarked'), 'win');
     load();
   };
 
   const shareText = () => {
     const lines = combined.map((t) =>
       lang === 'he'
-        ? `💸 ${who(t.from === KITTY ? null : t.from)} מעביר/ה ל${who(t.to === KITTY ? null : t.to)} ${fmt(t.amount)}₪`
-        : `💸 ${who(t.from === KITTY ? null : t.from)} pays ${who(t.to === KITTY ? null : t.to)} ₪${fmt(t.amount)}`,
+        ? `${whoText(t.from === KITTY ? null : t.from)} מעביר/ה ל${whoText(t.to === KITTY ? null : t.to)} ${fmt(t.amount)}₪`
+        : `${whoText(t.from === KITTY ? null : t.from)} pays ${whoText(t.to === KITTY ? null : t.to)} ₪${fmt(t.amount)}`,
     );
-    return [`👑 King Jack - ${tr('חובות פתוחים (קיזוז כולל)', 'Open debts (combined)')}`, '', ...lines].join('\n');
+    return [`King Jack - ${tr('חובות פתוחים (קיזוז כולל)', 'Open debts (combined)')}`, '', ...lines].join('\n');
   };
 
   const Row = ({ d }: { d: DebtRow }) => (
@@ -95,18 +96,19 @@ export function Debts({ profile, onBack }: { profile: Profile; onBack: () => voi
       <div className="grow">
         <div className="debt-who">
           <span dir="auto">{who(d.from_user)}</span>
-          <span className="arrow">{arrow}</span>
+          <Arrow size={15} aria-label={tr('משלם ל', 'pays')} />
           <span dir="auto">{who(d.to_user)}</span>
         </div>
-        <div className="sub">
-          {rooms[d.room_id]?.name ?? ''} · {dateFmt(rooms[d.room_id]?.closed_at ?? d.created_at)}
-          {d.paid && ` · ✔ ${tr('שולם', 'paid')} ${dateFmt(d.paid_at ?? undefined)}`}
+        <div className="sub facts-line">
+          <span dir="auto">{rooms[d.room_id]?.name ?? ''}</span>
+          <span>{dateFmt(rooms[d.room_id]?.closed_at ?? d.created_at)}</span>
+          {d.paid && <span className="pos">{tr(`שולם ${dateFmt(d.paid_at ?? undefined)}`, `Paid ${dateFmt(d.paid_at ?? undefined)}`)}</span>}
         </div>
       </div>
       <b className="debt-amount">₪{fmt(Number(d.amount))}</b>
       {canMark(d) && (
         <AsyncButton className={`btn small ${d.paid ? 'ghost' : 'primary'}`} onClick={() => mark(d, !d.paid)}>
-          {d.paid ? tr('בטל', 'Undo') : tr('שולם ✔', 'Paid ✔')}
+          {d.paid ? tr('ביטול', 'Undo') : tr('שולם', 'Paid')}
         </AsyncButton>
       )}
     </div>
@@ -115,68 +117,64 @@ export function Debts({ profile, onBack }: { profile: Profile; onBack: () => voi
   return (
     <div className="screen has-nav">
       <header className="topbar">
-        <button className="icon-btn" onClick={onBack} aria-label={lang === 'he' ? 'חזרה' : 'Back'}>
-          {lang === 'he' ? '➜' : '⬅'}
-        </button>
-        <h1>{tr('💸 חובות', '💸 Debts')}</h1>
-        <span />
+        <h1>{tr('חובות', 'Debts')}</h1>
       </header>
       <div className="content">
-        <div className="debt-summary">
+        <div className="ledger-head">
           <div>
             <div className="stat-label">{tr('אני חייב', 'I owe')}</div>
-            <div className="stat-value neg">₪{fmt(iOwe)}</div>
+            <div className={`stat-value ${iOwe > 0 ? 'neg' : ''}`}>₪{fmt(iOwe)}</div>
           </div>
           <div>
             <div className="stat-label">{tr('חייבים לי', 'Owed to me')}</div>
-            <div className="stat-value pos">₪{fmt(owedToMe)}</div>
+            <div className={`stat-value ${owedToMe > 0 ? 'pos' : ''}`}>₪{fmt(owedToMe)}</div>
           </div>
         </div>
 
-        <div className="tabs">
-          <button className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
-            {tr('שלי', 'Mine')} {mine.length > 0 && `(${mine.length})`}
+        <div className="tabs" role="tablist">
+          <button role="tab" aria-selected={tab === 'mine'} className={tab === 'mine' ? 'active' : ''} onClick={() => setTab('mine')}>
+            {tr('שלי', 'Mine')}
+            {mine.length > 0 && <span className="tab-count">{mine.length}</span>}
           </button>
-          <button className={tab === 'all' ? 'active' : ''} onClick={() => setTab('all')}>
+          <button role="tab" aria-selected={tab === 'all'} className={tab === 'all' ? 'active' : ''} onClick={() => setTab('all')}>
             {tr('כל הקבוצה', 'Everyone')}
           </button>
-          <button className={tab === 'paid' ? 'active' : ''} onClick={() => setTab('paid')}>
+          <button role="tab" aria-selected={tab === 'paid'} className={tab === 'paid' ? 'active' : ''} onClick={() => setTab('paid')}>
             {tr('שולמו', 'Paid')}
           </button>
         </div>
 
         {debts == null && (
-          <div className="center">
+          <div className="center pad">
             <span className="spinner" />
           </div>
         )}
 
-        {tab === 'mine' && debts && (
+        {tab === 'mine' && debts && (mine.length === 0 ? <div className="empty">{tr('אין לך חובות פתוחים', 'You have no open debts')}</div> : (
           <div className="history">
-            {mine.length === 0 && <div className="empty">{tr('אין לך חובות פתוחים 🎉', 'You have no open debts 🎉')}</div>}
             {mine.map((d) => (
               <Row key={d.id} d={d} />
             ))}
           </div>
-        )}
+        ))}
 
         {tab === 'all' && debts && (
           <>
             {combined.length > 0 && (
               <>
-                <h3 className="section-title">{tr('🧮 קיזוז כולל - הדרך הקצרה לסגור הכל', '🧮 Combined settle-up - the shortest way to close everything')}</h3>
+                <h3 className="section-title">{tr('קיזוז כולל: הדרך הקצרה לסגור הכל', 'Combined settle-up: the shortest way to close everything')}</h3>
                 <div className="transfers">
                   {combined.map((t, i) => (
                     <div key={i} className="transfer">
                       <span dir="auto">{who(t.from === KITTY ? null : t.from)}</span>
-                      <span className="arrow">{arrow}</span>
+                      <Arrow size={15} />
                       <span dir="auto">{who(t.to === KITTY ? null : t.to)}</span>
                       <b>₪{fmt(t.amount)}</b>
                     </div>
                   ))}
                 </div>
                 <a className="btn whatsapp block" href={`https://wa.me/?text=${encodeURIComponent(shareText())}`} target="_blank" rel="noreferrer">
-                  {tr('שיתוף בוואטסאפ 💬', 'Share on WhatsApp 💬')}
+                  <MessageCircle size={18} /> {tr('שיתוף בוואטסאפ', 'Share on WhatsApp')}
                 </a>
                 {profile.is_admin && (
                   <AsyncButton
@@ -185,34 +183,36 @@ export function Debts({ profile, onBack }: { profile: Profile; onBack: () => voi
                       if (!confirm(tr('לסמן את כל החובות הפתוחים כשולמו? (אחרי שכולם העבירו לפי הקיזוז הכולל)', 'Mark ALL open debts as paid? (after everyone paid per the combined settle-up)')))
                         return;
                       await gameCall({ op: 'admin', action: 'settleAll' });
-                      toast(tr('כל החובות נסגרו ✔', 'All debts closed ✔'), 'win');
+                      toast(tr('כל החובות נסגרו', 'All debts closed'), 'win');
                       load();
                     }}
                   >
-                    {tr('🛡️ סגירת כל החובות (מנהל)', '🛡️ Close all debts (admin)')}
+                    <ShieldCheck size={18} /> {tr('סגירת כל החובות (מנהל)', 'Close all debts (admin)')}
                   </AsyncButton>
                 )}
               </>
             )}
-            <h3 className="section-title">{tr('📜 כל החובות הפתוחים', '📜 All open debts')}</h3>
-            <div className="history">
-              {open.length === 0 && <div className="empty">{tr('אין חובות פתוחים בקבוצה 🎉', 'No open debts in the group 🎉')}</div>}
-              {open.map((d) => (
-                <Row key={d.id} d={d} />
-              ))}
-            </div>
+            <h3 className="section-title">{tr('כל החובות הפתוחים', 'All open debts')}</h3>
+            {open.length === 0 ? (
+              <div className="empty">{tr('אין חובות פתוחים בקבוצה', 'No open debts in the group')}</div>
+            ) : (
+              <div className="history">
+                {open.map((d) => (
+                  <Row key={d.id} d={d} />
+                ))}
+              </div>
+            )}
           </>
         )}
 
-        {tab === 'paid' && debts && (
+        {tab === 'paid' && debts && (paid.length === 0 ? <div className="empty">{tr('עוד לא סומנו תשלומים', 'No payments marked yet')}</div> : (
           <div className="history">
-            {paid.length === 0 && <div className="empty">{tr('עוד לא סומנו תשלומים', 'No payments marked yet')}</div>}
             {paid.map((d) => (
               <Row key={d.id} d={d} />
             ))}
           </div>
-        )}
-        <p className="hint center">{tr('חובות נוצרים אוטומטית כשסוגרים ערב בכסף אמיתי 💰', 'Debts are created automatically when a real-money night is closed 💰')}</p>
+        ))}
+        <p className="hint center">{tr('חובות נוצרים אוטומטית כשסוגרים ערב בכסף אמיתי.', 'Debts are created automatically when a real-money night is closed.')}</p>
       </div>
     </div>
   );
