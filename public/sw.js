@@ -1,5 +1,5 @@
 // Service Worker: התראות פוש + שמירת האפליקציה במטמון לטעינה מהירה
-const CACHE = 'king-jack-v1';
+const CACHE = 'king-jack-v3';
 
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => {
@@ -17,8 +17,10 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // הדף הראשי תמיד טרי מהרשת - כדי שעדכונים יגיעו מיד
+  const fresh = req.mode === 'navigate' ? fetch(req, { cache: 'no-store' }) : fetch(req);
   e.respondWith(
-    fetch(req)
+    fresh
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

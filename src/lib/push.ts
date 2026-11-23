@@ -15,7 +15,19 @@ export function pushPermission(): NotificationPermission | 'unsupported' {
 export async function registerSW() {
   if (!('serviceWorker' in navigator) || !window.isSecureContext) return;
   try {
-    await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
+    const hadController = !!navigator.serviceWorker.controller;
+    const reg = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`, { updateViaCache: 'none' });
+    // גרסה חדשה השתלטה - מרעננים פעם אחת כדי לטעון אותה
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloaded) return;
+      reloaded = true;
+      window.location.reload();
+    });
+    // בודקים עדכון כל פעם שחוזרים לאפליקציה
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') reg.update().catch(() => {});
+    });
   } catch (e) {
     console.warn('SW failed', e);
   }
