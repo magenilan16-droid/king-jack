@@ -8,6 +8,8 @@ import {
   MAX_STRIKES,
   cashoutEffects,
   round2,
+  between,
+  botSpeed,
 } from './common.ts';
 import { basicStrategy } from './strategy.ts';
 
@@ -79,6 +81,7 @@ export interface BlackjackHandRecord {
 export interface BJSecret {
   shoe: Card[];
   hole: Card | null;
+  bot?: { at: number } | null; // מתי הבוט שבתור "יסיים לחשוב"
 }
 
 export interface BJFull {
@@ -95,6 +98,7 @@ export type BJMove =
   | { type: 'split' }
   | { type: 'next' }
   | { type: 'timeout' }
+  | { type: 'bot' }
   | { type: 'setBanker'; playerId: string | null };
 
 const MAX_PLAYERS = 10;
@@ -269,9 +273,24 @@ export function actBlackjack(f: BJFull, actorId: string, move: BJMove, now: numb
       advance(f, now);
       break;
     }
+    case 'bot': {
+      // הבוט שבתור משחק לפי האסטרטגיה הבסיסית - רק אחרי שעבר זמן המחשבה שלו
+      if (s.phase !== 'playing' || !s.turn) fail('אין תור פעיל');
+      const p = s.players[s.turn.p];
+      if (!p.isBot) fail('זה לא התור של בוט');
+      if (f.sec.bot && now < f.sec.bot.at) fail('הבוט עוד חושב');
+      botPlay(f);
+      advance(f, now);
+      break;
+    }
     case 'timeout': {
       if (s.phase !== 'playing' || !s.turn || !s.turnDeadline) fail('אין תור פעיל');
       if (now < s.turnDeadline) fail('הזמן עוד לא נגמר');
+      if (s.players[s.turn.p].isBot) {
+        botPlay(f);
+        advance(f, now);
+        break;
+      }
       log(s, `${s.players[s.turn.p].name} - נגמר הזמן, עומד`);
       s.players[s.turn.p].strikes = (s.players[s.turn.p].strikes ?? 0) + 1;
       playMove(f, 'stand');
@@ -377,7 +396,7 @@ function deal(f: BJFull, now: number) {
   }
   for (const p of players) if (handValue(p.hands[0].cards).total === 21) p.hands[0].done = true;
   s.turn = { p: -1, h: 0 };
-  advance(f, now);
+  advance(f, now, true);
 }
 
 function playMove(f: BJFull, type: 'hit' | 'stand' | 'double' | 'split') {
@@ -412,8 +431,8 @@ function playMove(f: BJFull, type: 'hit' | 'stand' | 'double' | 'split') {
   }
 }
 
-// מעבר לתור הבא + הפעלת בוטים
-function advance(f: BJFull, now: number) {
+// מעבר לתור הבא (בוט מקבל זמן מחשבה). justDealt = רק עכשיו חילקו
+function advance(f: BJFull, now: number, justDealt = false) {
   const s = f.pub;
   for (;;) {
     const next = findNextTurn(s);
@@ -423,15 +442,36 @@ function advance(f: BJFull, now: number) {
     }
     s.turn = next;
     const p = s.players[next.p];
-    if (p.isBot || p.leaving) {
-      const h = p.hands[next.h];
-      const mv = p.leaving ? 'stand' : basicStrategy(h.cards, s.dealer.cards[0], canDouble(p, h), canSplit(p, h));
-      playMove(f, mv);
+    if (p.leaving) {
+      playMove(f, 'stand');
       continue;
     }
     s.turnDeadline = now + turnMs(s.settings);
+    // בוט "חושב" כמו בן אדם; בתחילת סיבוב מחכים גם שהקלפים יגיעו לשולחן
+    f.sec.bot = p.isBot ? { at: now + bjThink(f, p, next.h, justDealt) } : null;
     return;
   }
+}
+
+function bjThink(f: BJFull, p: BJPlayer, hi: number, justDealt: boolean): number {
+  const s = f.pub;
+  const h = p.hands[hi];
+  const mv = basicStrategy(h.cards, s.dealer.cards[0], canDouble(p, h), canSplit(p, h));
+  let t = mv === 'double' || mv === 'split' ? between(1300, 2400) : between(700, 1600);
+  const total = handValue(h.cards).total;
+  if (mv === 'hit' && total >= 12 && total <= 16) t += between(200, 900); // יד מעצבנת - מתלבט
+  t *= botSpeed(p.id);
+  // התור הראשון בסיבוב: מחכים שהחלוקה תיגמר על המסך
+  if (justDealt) t += 380 + (s.players.reduce((a, x) => a + x.hands.length * 2, 0) + 2) * 110;
+  return Math.round(Math.min(5000, Math.max(500, t)));
+}
+
+function botPlay(f: BJFull) {
+  const s = f.pub;
+  const p = s.players[s.turn!.p];
+  const h = p.hands[s.turn!.h];
+  f.sec.bot = null;
+  playMove(f, basicStrategy(h.cards, s.dealer.cards[0], canDouble(p, h), canSplit(p, h)));
 }
 
 function findNextTurn(s: BJState): { p: number; h: number } | null {

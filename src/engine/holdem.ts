@@ -1,7 +1,7 @@
 // מנוע טקסס הולדם (No-Limit) מרובה משתתפים, וגם אומהה (Pot-Limit, 4 קלפים ביד)
 import { type Card, newDeck, shuffle } from './cards.ts';
 import { bestFor, HAND_NAMES } from './handEval.ts';
-import { equity } from './equity.ts';
+import { pokerBotPlan } from './pokerBot.ts';
 import { type PlayerBase, type LedgerEffect, fail, turnMs, MAX_STRIKES, cashoutEffects } from './common.ts';
 
 export interface HPlayer extends PlayerBase {
@@ -108,6 +108,8 @@ export interface HState {
 export interface HSecret {
   deck: Card[];
   holes: Record<string, Card[]>;
+  // מה הבוט שבתור החליט ומתי הוא "יסיים לחשוב" (סודי - שאף אחד לא יראה מראש)
+  bot?: { id: string; hand: number; n: number; move: HMove; at: number } | null;
 }
 
 export interface HFull {
@@ -124,6 +126,7 @@ export type HMove =
   | { type: 'allin' }
   | { type: 'next' }
   | { type: 'timeout' }
+  | { type: 'bot' }
   | { type: 'sitOut'; value: boolean }
   | { type: 'show' };
 
@@ -290,10 +293,33 @@ export function actHoldem(f: HFull, actorId: string, move: HMove, now: number): 
       log(s, p.name + ' הראה/תה קלפים 👀');
       break;
     }
+    case 'bot': {
+      // הבוט שבתור מבצע את מה שהחליט - רק אחרי שעבר זמן המחשבה שלו
+      if (!isHandRunning(s) || !s.turnId) fail('אין תור פעיל');
+      const p = s.players.find((x) => x.id === s.turnId)!;
+      if (!p.isBot) fail('זה לא התור של בוט');
+      const plan = f.sec.bot;
+      const fresh = !!plan && plan.id === p.id && plan.hand === s.handNo && plan.n === (s.handLog?.length ?? 0);
+      if (!fresh) {
+        // משהו השתנה בזמן שחשב (מישהו קם וכו׳) - חושב מחדש
+        planBot(f, p, now);
+        break;
+      }
+      if (now < plan.at) fail('הבוט עוד חושב');
+      botMove(f, p, plan.move);
+      advance(f, now, p.id);
+      break;
+    }
     case 'timeout': {
       if (!isHandRunning(s) || !s.turnId || !s.turnDeadline) fail('אין תור פעיל');
       if (now < s.turnDeadline) fail('הזמן עוד לא נגמר');
       const p = s.players.find((x) => x.id === s.turnId)!;
+      if (p.isBot) {
+        const plan = f.sec.bot;
+        botMove(f, p, plan && plan.id === p.id && plan.n === (s.handLog?.length ?? 0) ? plan.move : pokerBotPlan(f, p).move);
+        advance(f, now, p.id);
+        break;
+      }
       applyBet(f, p, p.bet === s.currentBet ? { type: 'check' } : { type: 'fold' });
       p.strikes = (p.strikes ?? 0) + 1;
       if (!p.isBot && p.strikes >= MAX_STRIKES) p.sitOut = true; // פספס פעמיים ברצף - מושב בצד
@@ -468,9 +494,9 @@ function advance(f: HFull, now: number, lastId: string | null) {
       s.turnId = p.id;
       s.turnDeadline = now + turnMs(s.settings);
       if (p.isBot) {
-        applyBet(f, p, botDecision(f, p));
-        lastId = p.id;
-        continue;
+        // הבוט "חושב" - השרת יבצע את המהלך שלו אחרי זמן המחשבה
+        planBot(f, p, now);
+        return;
       }
       if (p.sitOut) {
         // שחקן שישב בצד - פולד/צ׳ק אוטומטי
@@ -529,6 +555,8 @@ function winUncontested(f: HFull, w: HPlayer) {
   s.winners = [{ id: w.id, name: w.name, amount: pot, cat: -1 }];
   s.potResults = [{ amount: pot, eligible: [w.id], winners: [w.id] }];
   log(s, `${w.name} לקח/ה ${pot} 🏆`);
+  // כמו בן אדם: לפעמים הבוט מראה מה היה לו (בלוף או יד אמיתית)
+  if (w.isBot && f.sec.holes[w.id] && Math.random() < 0.07) w.shown = f.sec.holes[w.id];
   recordHand(s, 'fold', new Map());
   endHand(s);
 }
@@ -657,34 +685,18 @@ function seatDist(s: HState, p: HPlayer) {
 }
 
 // ---------- בוט ----------
-function botDecision(f: HFull, p: HPlayer): HMove {
-  const s = f.pub;
-  const opps = s.players.filter((x) => x !== p && x.inHand && !x.folded).length;
-  const omaha = isOmaha(s);
-  const eq = equity(f.sec.holes[p.id], s.board, opps, omaha ? 150 : 250);
-  const pot = potSize(s);
-  const toCall = s.currentBet - p.bet;
-  const r = Math.random();
-  // סף "יד חזקה" יורד ככל שיש פחות יריבים
-  // באומהה הסיכויים קרובים יותר זה לזה, אז הסף נמוך יותר
-  const strong = Math.min(0.85, (omaha ? 1.4 : 1.6) / (opps + 1));
-  const raiseTo = (frac: number): HMove => {
-    if (p.acted) return toCall > 0 ? { type: 'call' } : { type: 'check' };
-    const size = Math.max(s.minRaise, Math.round(pot * frac));
-    const to = Math.min(s.currentBet + size, omaha ? potLimitTo(s, p) : Infinity);
-    return to >= p.bet + p.chips ? ({ type: 'allin' } as HMove) : ({ type: 'raise', to } as HMove);
-  };
-  if (toCall <= 0) {
-    if (eq > strong && r < 0.75) return raiseTo(0.6);
-    if (r < 0.1) return raiseTo(0.4); // בלוף קטן
-    return { type: 'check' };
+function planBot(f: HFull, p: HPlayer, now: number) {
+  const plan = pokerBotPlan(f, p);
+  f.sec.bot = { id: p.id, hand: f.pub.handNo, n: f.pub.handLog?.length ?? 0, move: plan.move, at: now + plan.think };
+}
+
+function botMove(f: HFull, p: HPlayer, move: HMove) {
+  f.sec.bot = null;
+  try {
+    applyBet(f, p, move);
+  } catch {
+    applyBet(f, p, p.bet >= f.pub.currentBet ? { type: 'check' } : { type: 'fold' });
   }
-  const potOdds = toCall / (pot + toCall);
-  if (eq > strong + 0.1 && r < 0.6) return raiseTo(0.75);
-  if (eq >= potOdds + 0.03) return { type: 'call' };
-  if (toCall <= s.settings.bb && r < 0.4) return { type: 'call' };
-  if (r < 0.05) return { type: 'call' };
-  return { type: 'fold' };
 }
 
 // מה כל שחקן מקבל באופן פרטי - הקלפים הסגורים שלו

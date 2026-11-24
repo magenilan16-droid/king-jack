@@ -167,10 +167,53 @@ async function save(roomId: string, version: number, full: Full, effects: Ledger
   return data === true;
 }
 
+// ---------- בוטים ----------
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// אם עכשיו תור של בוט - מתי הוא מסיים "לחשוב"
+function botDue(full: Full): number | null {
+  const id = turnUser(full.pub);
+  if (!id || !id.startsWith('bot-')) return null;
+  const at = (full.sec as { bot?: { at?: number } | null }).bot?.at;
+  return typeof at === 'number' ? at : Date.now();
+}
+
+// הבוטים משחקים כמו בני אדם: מחכים את זמן המחשבה של הבוט, מבצעים, וממשיכים לבוט הבא - עד שמגיע תור של בן אדם
+async function runBots(roomId: string, due: number) {
+  for (let step = 0; step < 80; step++) {
+    await sleep(Math.max(0, due - Date.now()) + 25);
+    const box: { next: number | null } = { next: null };
+    try {
+      const res = await mutate(
+        roomId,
+        (full) => {
+          const id = turnUser(full.pub);
+          if (!id || !id.startsWith('bot-')) throw new GameError('אין תור של בוט');
+          return act(full, id, { type: 'bot' }, Date.now());
+        },
+        { bots: false, onSaved: (full) => (box.next = botDue(full)) },
+      );
+      if (res.status !== 200) return;
+    } catch (e) {
+      if (!(e instanceof GameError)) {
+        console.error('bots', roomId, e);
+        return;
+      }
+      // מישהו אחר כבר הזיז את הבוט (או שהוא עוד חושב) - קוראים שוב את המצב וממשיכים לחכות
+      const { data: loaded } = await admin.rpc('game_load', { p_room: roomId });
+      if (!loaded || loaded.status !== 'open') return;
+      box.next = botDue({ pub: loaded.state, sec: loaded.secret } as Full);
+    }
+    if (box.next == null) return;
+    due = box.next;
+  }
+}
+
 // טעינה -> פעולה -> שמירה, עם ניסיון חוזר אם מישהו אחר שמר באמצע
 async function mutate(
   roomId: string,
   fn: (full: Full) => { effects: LedgerEffect[]; closed?: boolean },
+  opts: { bots?: boolean; onSaved?: (full: Full) => void } = {},
 ): Promise<Response> {
   for (let attempt = 0; attempt < 6; attempt++) {
     const { data: loaded, error } = await admin.rpc('game_load', { p_room: roomId });
@@ -179,9 +222,14 @@ async function mutate(
     if (loaded.status !== 'open') return json({ error: 'השולחן נסגר' }, 400);
     const full = { pub: loaded.state, sec: loaded.secret } as Full;
     const before = turnUser(full.pub);
+    const dueBefore = botDue(full);
     const handBefore = JSON.stringify(full.pub.lastHand ?? null);
     const res = fn(full);
     if (await save(roomId, loaded.version, full, res.effects, !!res.closed)) {
+      opts.onSaved?.(full);
+      // התחיל תור חדש של בוט - השרת יפעיל אותו אחרי שיסיים לחשוב
+      const due = res.closed ? null : botDue(full);
+      if (opts.bots !== false && due != null && due !== dueBefore) background(runBots(roomId, due));
       const after = res.closed ? null : turnUser(full.pub);
       if (after && after !== before && !after.startsWith('bot-')) background(notifyTurn(after, { id: roomId, name: loaded.name }));
       if (res.closed && loaded.money_mode === 'real') await createDebts(roomId);

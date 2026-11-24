@@ -37,6 +37,20 @@ export const MAX_STRIKES = 2;
 export const BOT_NAMES = ['רובוט רפי', 'בוטי', 'צ׳יפי', 'ד״ר קלף', 'מקס', 'לולו', 'ג׳וני', 'בינה'];
 export const BOT_AVATARS = ['🤖', '👾', '🦾', '🧠', '🎰', '🦊', '🐙', '🦉'];
 
+// מספר קבוע לכל בוט (לפי המזהה שלו) - קובע את האופי שלו לכל הערב
+export function botSeed(id: string): number {
+  let h = 7;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+// קצב המחשבה של כל בוט (אותו בוט - אותו קצב בכל המשחקים): רגיל, איטי, מהיר, קצת איטי
+const BOT_SPEEDS = [1, 1.25, 0.8, 1.05];
+export const botSpeed = (id: string) => BOT_SPEEDS[botSeed(id) % BOT_SPEEDS.length];
+
+// מספר אקראי בטווח (לזמני מחשבה)
+export const between = (a: number, b: number) => a + Math.random() * (b - a);
+
 // כשמישהו יוצא עם יתרה שלילית (קרה לבנק) - זה נרשם כקנייה נוספת
 export function cashoutEffects(p: PlayerBase): LedgerEffect[] {
   const base = { playerId: p.id, isBot: p.isBot, name: p.name };

@@ -21,6 +21,7 @@ import { actionLabel, displayName, handName } from '../lib/display';
 import { sfx, seatPan } from '../lib/sound';
 import { vibrate } from '../lib/prefs';
 import { useTween, chipBurst } from '../lib/motion';
+import { useBotKick } from '../lib/useBotKick';
 
 type Act = (move: Record<string, unknown>) => Promise<void>;
 
@@ -128,6 +129,8 @@ export function HoldemView({
   const dealerId = s.players[s.dealerIdx]?.id;
   const showdown = s.phase === 'showdown';
   const running = s.phase !== 'waiting' && !showdown;
+  // תור של בוט: השרת מזיז אותו אחרי זמן המחשבה, והטלפון רק מגבה אם זה נתקע
+  useBotKick(roomId, running && s.turnId?.startsWith('bot-') ? `${s.handNo}:${s.handLog?.length ?? 0}:${s.turnId}` : null, !!me, isHost);
 
   useEffect(() => {
     setRaiseOpen(false);

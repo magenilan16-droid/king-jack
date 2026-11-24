@@ -18,6 +18,7 @@ import { displayName } from '../lib/display';
 import { sfx, seatPan } from '../lib/sound';
 import { vibrate } from '../lib/prefs';
 import { useTween, flyChips, chipBurst } from '../lib/motion';
+import { useBotKick } from '../lib/useBotKick';
 import { Crown } from 'lucide-react';
 import { MAX_STRIKES, turnMs } from '../engine/common';
 
@@ -95,6 +96,9 @@ export function BlackjackView({
   const turnPlayer = s.phase === 'playing' && s.turn ? s.players[s.turn.p] : null;
   const myTurn = !!turnPlayer && turnPlayer.id === myId;
   const total = turnMs(s.settings);
+  // תור של בוט: השרת מזיז אותו אחרי זמן המחשבה, והטלפון רק מגבה אם זה נתקע
+  const botHand = turnPlayer?.isBot && s.turn ? turnPlayer.hands[s.turn.h] : null;
+  useBotKick(roomId, botHand ? `${s.round}:${s.turn!.p}:${s.turn!.h}:${botHand.cards.length}` : null, !!me, isHost);
   const [bet, setBet] = useState(me?.bet ?? s.settings.minBet);
   const [resultQuip, setResultQuip] = useState('');
 

@@ -36,6 +36,19 @@ for (const variant of [undefined, 'omaha'] as const) {
       if (guard++ > 200) throw new Error('loop');
       const id = f.pub.turnId!;
       const p = f.pub.players.find((x) => x.id === id)!;
+      // בוט: משחק עם המוח שלו, אחרי זמן המחשבה (לפני כן השרת דוחה)
+      if (p.isBot) {
+        const logLen = f.pub.handLog?.length ?? 0;
+        try {
+          act(f, id, { type: 'bot' }, now);
+        } catch {
+          /* "הבוט עוד חושב" - כמו שצריך */
+        }
+        if ((f.pub.handLog?.length ?? 0) !== logLen) throw new Error('bot moved before thinking');
+        now += 9500;
+        act(f, id, { type: 'bot' }, now);
+        continue;
+      }
       const r = Math.random();
       const toCall = f.pub.currentBet - p.bet;
       // אומהה: במקום אול-אין - העלאה בגודל הקופה (או אול-אין אם יש פחות)
@@ -99,6 +112,11 @@ for (const mode of ['house', 'player'] as const) {
     while (f.pub.phase === 'playing') {
       if (guard++ > 100) throw new Error('bj loop');
       const p = f.pub.players[f.pub.turn!.p];
+      if (p.isBot) {
+        now += 6000;
+        act(f, p.id, { type: 'bot' }, now);
+        continue;
+      }
       const opts = ['hit', 'stand', 'double', 'split'] as const;
       const mv = opts[Math.floor(Math.random() * 4)];
       try {

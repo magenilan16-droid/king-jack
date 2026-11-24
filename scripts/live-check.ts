@@ -56,6 +56,34 @@ for (const gameType of ['holdem', 'blackjack'] as const) {
   const { data: room } = await sb.from('game_rooms').select('state').eq('id', roomId).single();
   const st = room!.state as { phase: string; players: unknown[] };
   check(`${gameType}: hand started`, st.phase !== 'waiting' && st.phase !== 'betting', `phase=${st.phase} players=${st.players.length}`);
+
+  // הבוט "חושב" ואז משחק לבד - השרת מפעיל אותו (בלי שאף טלפון יבקש)
+  {
+    type S = { phase: string; turnId?: string | null; turn?: { p: number } | null; players: { id: string }[]; handLog?: unknown[]; round?: number };
+    const load = async () => (await sb.from('game_rooms').select('state').eq('id', roomId).single()).data!.state as S;
+    const myId = login.data.user!.id;
+    const turnOf = (x: S) => (gameType === 'holdem' ? x.turnId : x.phase === 'playing' && x.turn ? x.players[x.turn.p]?.id : null);
+    let cur = await load();
+    if (turnOf(cur) === myId) {
+      await call({ op: 'act', roomId, move: gameType === 'holdem' ? { type: 'call' } : { type: 'stand' } }).catch(() => {});
+      cur = await load();
+    }
+    const botTurn = turnOf(cur)?.startsWith('bot-');
+    const sig = (x: S) => JSON.stringify([x.phase, turnOf(x), x.handLog?.length ?? 0]);
+    const start = Date.now();
+    const before = sig(cur);
+    let moved = false;
+    while (botTurn && Date.now() - start < 15000) {
+      await new Promise((r) => setTimeout(r, 250));
+      if (sig(await load()) !== before) {
+        moved = true;
+        break;
+      }
+    }
+    const ms = Date.now() - start;
+    if (botTurn) check(`${gameType}: bot thinks, then plays by itself`, moved && ms >= 400, `after ${ms}ms`);
+    else check(`${gameType}: (no bot turn to watch)`, true, `phase=${cur.phase}`);
+  }
   const rm = await call({ op: 'removeRoom', roomId });
   check(`${gameType}: removeRoom deletes practice table`, rm.deleted === true);
   const { data: gone } = await sb.from('game_rooms').select('id').eq('id', roomId).maybeSingle();
