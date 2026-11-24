@@ -1,6 +1,6 @@
-// מנוע טקסס הולדם (No-Limit) מרובה משתתפים
+// מנוע טקסס הולדם (No-Limit) מרובה משתתפים, וגם אומהה (Pot-Limit, 4 קלפים ביד)
 import { type Card, newDeck, shuffle } from './cards.ts';
-import { bestHand, HAND_NAMES } from './handEval.ts';
+import { bestFor, HAND_NAMES } from './handEval.ts';
 import { equity } from './equity.ts';
 import { type PlayerBase, type LedgerEffect, fail, turnMs, MAX_STRIKES, cashoutEffects } from './common.ts';
 
@@ -28,6 +28,7 @@ export interface HSettings {
   blindUpMinutes?: number; // 0 = בליינדים קבועים
   baseBb?: number; // הביג בליינד ההתחלתי
   maxRebuys?: number | null; // null = ללא הגבלה
+  variant?: 'omaha'; // אומהה פוט-לימיט. בלי = טקסס הולדם נו-לימיט
 }
 
 export interface HWinner {
@@ -54,6 +55,7 @@ export interface HandLogEntry {
 // רשומת היסטוריה של יד שהסתיימה
 export interface HoldemHandRecord {
   kind: 'holdem';
+  variant?: 'omaha';
   no: number;
   board: Card[];
   pot: number;
@@ -129,6 +131,14 @@ const MAX_PLAYERS = 10;
 
 export function potSize(s: HState): number {
   return s.players.reduce((a, p) => a + p.total, 0);
+}
+
+export const isOmaha = (s: HState) => s.settings.variant === 'omaha';
+
+// פוט-לימיט: הכי הרבה שמותר להעלות אליו = ההימור הנוכחי + הקופה אחרי שמשווים
+export function potLimitTo(s: HState, p: HPlayer): number {
+  const toCall = Math.max(0, s.currentBet - p.bet);
+  return s.currentBet + potSize(s) + toCall;
 }
 
 export function canAct(p: HPlayer): boolean {
@@ -351,6 +361,7 @@ function applyBet(f: HFull, p: HPlayer, move: HMove) {
       }
       const raiseBy = to - s.currentBet;
       if (raiseBy < s.minRaise && to < max) fail(`העלאה מינימלית ל-${s.currentBet + s.minRaise}`);
+      if (isOmaha(s) && to > potLimitTo(s, p)) fail(`באומהה אפשר להעלות עד גודל הקופה: ${potLimitTo(s, p)}`);
       put(to - p.bet);
       if (raiseBy >= s.minRaise) {
         s.minRaise = raiseBy;
@@ -409,7 +420,8 @@ function startHand(f: HFull, now: number): LedgerEffect[] {
   applyBlindLevel(s, now);
   s.dealerIdx = nextIdx(s, s.dealerIdx, (p) => p.inHand);
   f.sec.deck = shuffle(newDeck());
-  for (const p of eligible) f.sec.holes[p.id] = [f.sec.deck.pop()!, f.sec.deck.pop()!];
+  const nHole = isOmaha(s) ? 4 : 2;
+  for (const p of eligible) f.sec.holes[p.id] = Array.from({ length: nHole }, () => f.sec.deck.pop()!);
   s.handNo++;
   s.phase = 'preflop';
   const headsUp = eligible.length === 2;
@@ -533,7 +545,8 @@ function endHand(s: HState) {
 function showdown(f: HFull) {
   const s = f.pub;
   const alive = s.players.filter((p) => p.inHand && !p.folded);
-  const evals = new Map(alive.map((p) => [p.id, bestHand(f.sec.holes[p.id].concat(s.board))]));
+  // באומהה: בדיוק 2 מהיד + 3 מהלוח
+  const evals = new Map(alive.map((p) => [p.id, bestFor(f.sec.holes[p.id], s.board)]));
   for (const p of alive) p.shown = f.sec.holes[p.id];
   // בניית פוטים (קופה ראשית + קופות צדדיות)
   const pots = computePots(s);
@@ -589,6 +602,7 @@ export function computePots(s: HState): { amount: number; eligible: string[] }[]
 function recordHand(s: HState, reason: 'fold' | 'showdown', evals: Map<string, { cat: number; best: Card[] }>) {
   s.lastHand = {
     kind: 'holdem',
+    ...(isOmaha(s) ? { variant: 'omaha' as const } : {}),
     no: s.handNo,
     board: [...s.board],
     pot: potSize(s),
@@ -646,16 +660,18 @@ function seatDist(s: HState, p: HPlayer) {
 function botDecision(f: HFull, p: HPlayer): HMove {
   const s = f.pub;
   const opps = s.players.filter((x) => x !== p && x.inHand && !x.folded).length;
-  const eq = equity(f.sec.holes[p.id], s.board, opps, 250);
+  const omaha = isOmaha(s);
+  const eq = equity(f.sec.holes[p.id], s.board, opps, omaha ? 150 : 250);
   const pot = potSize(s);
   const toCall = s.currentBet - p.bet;
   const r = Math.random();
   // סף "יד חזקה" יורד ככל שיש פחות יריבים
-  const strong = Math.min(0.85, 1.6 / (opps + 1));
+  // באומהה הסיכויים קרובים יותר זה לזה, אז הסף נמוך יותר
+  const strong = Math.min(0.85, (omaha ? 1.4 : 1.6) / (opps + 1));
   const raiseTo = (frac: number): HMove => {
     if (p.acted) return toCall > 0 ? { type: 'call' } : { type: 'check' };
     const size = Math.max(s.minRaise, Math.round(pot * frac));
-    const to = s.currentBet + size;
+    const to = Math.min(s.currentBet + size, omaha ? potLimitTo(s, p) : Infinity);
     return to >= p.bet + p.chips ? ({ type: 'allin' } as HMove) : ({ type: 'raise', to } as HMove);
   };
   if (toCall <= 0) {

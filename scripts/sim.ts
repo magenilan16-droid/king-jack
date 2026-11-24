@@ -1,6 +1,6 @@
 // סימולציה: מריץ הרבה ידיים ובודק שאין ז׳טונים שנעלמים
 import { createGame, act, joinGame, type Full } from '../src/engine/room.ts';
-import type { HFull } from '../src/engine/holdem.ts';
+import { type HFull, potLimitTo } from '../src/engine/holdem.ts';
 import type { BJFull } from '../src/engine/blackjack.ts';
 import { settle } from '../src/engine/settle.ts';
 import { bestHand } from '../src/engine/handEval.ts';
@@ -20,9 +20,9 @@ t('2h 2d 3c 3s 4h 4d Ac', 'שני זוגות');
 if (bestHand('Ah Kd 3c 4s 5h 9d 2c'.split(' ')).score <= bestHand('Kh Qd Jc 9s 8h 7d 2c'.split(' ')).score)
   throw new Error('wheel vs high');
 
-// ---- הולדם ----
-{
-  const { full, effects } = createGame('holdem', human('h1'), { sb: 5, bb: 10, buyIn: 1000 });
+// ---- הולדם ואומהה ----
+for (const variant of [undefined, 'omaha'] as const) {
+  const { full, effects } = createGame('holdem', human('h1'), { sb: 5, bb: 10, buyIn: 1000, ...(variant ? { variant } : {}) });
   const f = full as HFull;
   let bought = effects.reduce((a, e) => a + e.amount, 0);
   let cashed = 0;
@@ -38,14 +38,24 @@ if (bestHand('Ah Kd 3c 4s 5h 9d 2c'.split(' ')).score <= bestHand('Kh Qd Jc 9s 8
       const p = f.pub.players.find((x) => x.id === id)!;
       const r = Math.random();
       const toCall = f.pub.currentBet - p.bet;
+      // אומהה: במקום אול-אין - העלאה בגודל הקופה (או אול-אין אם יש פחות)
+      const potTo = Math.min(potLimitTo(f.pub, p), p.bet + p.chips);
+      const big =
+        variant && potTo < p.bet + p.chips
+          ? !p.acted && potTo > f.pub.currentBet ? { type: 'raise' as const, to: potTo } : toCall > 0 ? { type: 'call' as const } : { type: 'check' as const }
+          : { type: 'allin' as const };
+      // מי שכבר פעל בסיבוב (ונפתח לו שוב רק בגלל אול-אין קצר) יכול רק להשוות או לוותר - כמו בחוקים
+      const passive = toCall > 0 ? { type: 'call' as const } : { type: 'check' as const };
       const mv =
-        r < 0.15 ? { type: 'fold' as const } : r < 0.25 ? { type: 'allin' as const } :
+        r < 0.15 ? { type: 'fold' as const } : p.acted ? passive : r < 0.25 ? big :
         r < 0.4 && p.chips > toCall + f.pub.minRaise ? { type: 'raise' as const, to: f.pub.currentBet + f.pub.minRaise } :
         toCall > 0 ? { type: 'call' as const } : { type: 'check' as const };
       act(f, id, mv, now);
     }
     // היסטוריה ופוטים: סכום הקופות = הקופה, ורווח השחקנים ביד מתאפס
     const lh = f.pub.lastHand;
+    if (variant && lh?.variant !== 'omaha') throw new Error('omaha hand not marked');
+    if (variant) for (const pl of lh!.players) if (pl.shown && pl.shown.length !== 4) throw new Error('omaha shown cards ' + pl.shown.length);
     if (!lh || lh.no !== f.pub.handNo) throw new Error('missing hand record ' + f.pub.handNo);
     const potsSum = lh.pots.reduce((a, p) => a + p.amount, 0);
     if (potsSum !== lh.pot) throw new Error('pots mismatch ' + potsSum + ' vs ' + lh.pot);
@@ -67,7 +77,7 @@ if (bestHand('Ah Kd 3c 4s 5h 9d 2c'.split(' ')).score <= bestHand('Kh Qd Jc 9s 8
     bought += res.effects.filter((e) => e.kind === 'buyin').reduce((a, e) => a + e.amount, 0);
     void before;
   }
-  console.log('holdem OK, hands:', f.pub.handNo, 'hands with side pots:', sidePots);
+  console.log(`${variant ?? 'holdem'} OK, hands:`, f.pub.handNo, 'hands with side pots:', sidePots);
 }
 
 // ---- בלאק ג׳ק ----

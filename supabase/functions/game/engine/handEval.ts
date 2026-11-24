@@ -95,3 +95,29 @@ export function bestHand(cards: Card[]): { score: number; cat: number; name: str
   const cat = Math.floor(bestScore / 15 ** 5);
   return { score: bestScore, cat, name: HAND_NAMES[cat], best };
 }
+
+// אומהה: חובה להשתמש בדיוק ב-2 קלפים מהיד וב-3 מהלוח (לא יותר ולא פחות)
+export function bestOmaha(hole: Card[], board: Card[]): { score: number; cat: number; name: string; best: Card[] } {
+  let bestScore = -1;
+  let best: Card[] = [];
+  for (let a = 0; a < hole.length; a++)
+    for (let b = a + 1; b < hole.length; b++)
+      for (let c = 0; c < board.length; c++)
+        for (let d = c + 1; d < board.length; d++)
+          for (let e = d + 1; e < board.length; e++) {
+            const h = [hole[a], hole[b], board[c], board[d], board[e]];
+            const s = score5(h);
+            if (s > bestScore) {
+              bestScore = s;
+              best = h;
+            }
+          }
+  if (bestScore < 0) return { score: 0, cat: 0, name: HAND_NAMES[0], best: [] }; // עוד אין 3 קלפים בלוח
+  const cat = Math.floor(bestScore / 15 ** 5);
+  return { score: bestScore, cat, name: HAND_NAMES[cat], best };
+}
+
+// היד הטובה ביותר לפי סוג המשחק: 4 קלפים ביד = אומהה, 2 = טקסס הולדם
+export function bestFor(hole: Card[], board: Card[]) {
+  return hole.length === 4 ? bestOmaha(hole, board) : bestHand(hole.concat(board));
+}

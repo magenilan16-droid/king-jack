@@ -148,7 +148,9 @@ function clampSettings(type: GameType, s: Record<string, unknown>) {
   }
   const bb = num(s.bb, 10, 2, 100000);
   const blindUpMinutes = num(s.blindUpMinutes, 0, 0, 120);
-  return { bb, sb: Math.max(1, Math.floor(bb / 2)), baseBb: bb, buyIn: num(s.buyIn, bb * 100, 1, 10000000), turnSeconds, blindUpMinutes, maxRebuys };
+  // אומהה = אותו מנוע, 4 קלפים ביד והעלאה עד גודל הקופה
+  const variant = s.variant === 'omaha' ? { variant: 'omaha' as const } : {};
+  return { bb, sb: Math.max(1, Math.floor(bb / 2)), baseBb: bb, buyIn: num(s.buyIn, bb * 100, 1, 10000000), turnSeconds, blindUpMinutes, maxRebuys, ...variant };
 }
 
 async function save(roomId: string, version: number, full: Full, effects: LedgerEffect[], closed = false) {
@@ -272,7 +274,11 @@ Deno.serve(async (req) => {
       const pushed = await pushTo(to, (lang) => ({
         title: lang === 'he' ? `👑 ${me.name} מזמין/ה אותך לשחק!` : `👑 ${me.name} invites you to play!`,
         body: `${room.name} · ${
-          room.game_type === 'blackjack' ? (lang === 'he' ? 'בלאק ג׳ק' : 'Blackjack') : lang === 'he' ? 'טקסס הולדם' : "Texas Hold'em"
+          room.game_type === 'blackjack'
+            ? lang === 'he' ? 'בלאק ג׳ק' : 'Blackjack'
+            : room.state?.settings?.variant === 'omaha'
+              ? lang === 'he' ? 'אומהה' : 'Omaha'
+              : lang === 'he' ? 'טקסס הולדם' : "Texas Hold'em"
         } · ${lang === 'he' ? 'קוד' : 'Code'} ${room.code}`,
         url: `./?join=${room.code}`,
         tag: `invite-${room.code}`,

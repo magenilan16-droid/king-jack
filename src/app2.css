@@ -2134,3 +2134,53 @@ label {
   background: var(--surface-2);
   border: 1px solid var(--line-soft);
 }
+
+/* ---------- שלושה משחקים: הולדם, אומהה, בלאק ג׳ק ---------- */
+.game-tiles {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.game-tiles .gt-text {
+  padding: 9px 10px 11px;
+}
+.game-tiles .gt-text b {
+  font-size: 14.5px;
+  white-space: nowrap;
+}
+.game-pick {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+/* אומהה: ארבעה קלפים במניפה על הבד */
+.omaha .gp-card + .gp-card {
+  margin-inline-start: -15px;
+}
+.omaha .gp-card:nth-child(1) {
+  transform: rotate(-15deg) translateY(5px);
+}
+.omaha .gp-card:nth-child(2) {
+  transform: rotate(-5deg);
+}
+.omaha .gp-card:nth-child(3) {
+  transform: rotate(5deg);
+}
+.omaha .gp-card:nth-child(4) {
+  transform: rotate(15deg) translateY(5px);
+}
+.gp.omaha .gp-card + .gp-card {
+  margin-inline-start: -12px;
+}
+.room-badge.omaha {
+  font-family: var(--num);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--brass-hi);
+}
+@media (max-width: 360px) {
+  .game-tiles .gt-text b {
+    font-size: 13.5px;
+  }
+  .game-tiles .gt-text small {
+    font-size: 11px;
+  }
+}

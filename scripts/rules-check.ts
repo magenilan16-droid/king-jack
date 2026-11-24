@@ -1,6 +1,7 @@
 // בדיקות חוקים ותקינות שנמצאו באודיט - כל באג שתוקן מקבל כאן בדיקה שלא יחזור
 // הרצה: node scripts/rules-check.ts
-import { createHoldem, joinHoldem, actHoldem, leaveHoldem, potSize, type HFull } from '../src/engine/holdem.ts';
+import { createHoldem, joinHoldem, actHoldem, leaveHoldem, potSize, potLimitTo, type HFull } from '../src/engine/holdem.ts';
+import { bestHand, bestOmaha } from '../src/engine/handEval.ts';
 import { createBlackjack, joinBlackjack, actBlackjack, betWindowMs, type BJFull } from '../src/engine/blackjack.ts';
 import { act } from '../src/engine/room.ts';
 
@@ -119,6 +120,63 @@ const tryAct = (fn: () => unknown) => {
   act(full, 'A', { type: 'chat', text: 'hi' } as never, 0);
   check('chat flood rejected', tryAct(() => act(full, 'A', { type: 'chat', text: 'hi again' } as never, 300)) !== null);
   check('chat after a pause ok', tryAct(() => act(full, 'A', { type: 'chat', text: 'ok now' } as never, 2000)) === null);
+}
+
+// 8. אומהה: חובה בדיוק 2 קלפים מהיד ו-3 מהלוח
+{
+  const cards = (x: string) => x.split(' ');
+  const o = (hole: string, board: string) => bestOmaha(cards(hole), cards(board)).cat;
+  const h = (hole: string, board: string) => bestHand(cards(hole + ' ' + board)).cat;
+  // 4 לבבות בלוח + לב אחד ביד = אין צבע (בהולדם יש)
+  check('omaha: one suited card + 4 on board is not a flush', o('Ah Kc Qd 2s', '3h 7h 9h Jh 2c') !== 5 && h('Ah Kc', '3h 7h 9h Jh 2c') === 5);
+  // רצף שלם בלוח לא נחשב - צריך 2 מהיד
+  check('omaha: straight on the board does not count', o('As Ad Kc Kd', '5h 6c 7d 8s 9h') === 1 && h('As Ad', '5h 6c 7d 8s 9h') === 4);
+  // AAKK ביד = רק זוג אחד, אי אפשר להשתמש בשניהם
+  check('omaha: AAKK with a blank board is one pair', o('Ah Ad Kc Kd', '2s 7h 9c Jd 3s') === 1);
+  // שלישייה בלוח + זוג ביד = פול האוס
+  check('omaha: board trips + pocket pair is a full house', o('Qh Qc 3d 4s', 'Kh Kd Ks 2c 7d') === 6);
+  // צבע אמיתי: 2 לבבות ביד + 3 בלוח
+  check('omaha: two suited in hand + three on board is a flush', o('Ah 2h Kc Kd', '5h 9h Jh 3c 4d') === 5);
+}
+
+// 9. אומהה פוט-לימיט: אי אפשר להעלות מעל גודל הקופה, 4 קלפים לכל אחד
+{
+  const { full: f } = createHoldem(P('A'), { sb: 1, bb: 2, buyIn: 1000, variant: 'omaha' });
+  joinHoldem(f, P('B'), 1000);
+  joinHoldem(f, P('C'), 1000);
+  const s = f.pub;
+  actHoldem(f, 'A', { type: 'start' }, 0);
+  const holes = Object.values(f.sec.holes);
+  const all = holes.flat();
+  check('omaha: everyone gets 4 hole cards', holes.length === 3 && holes.every((x) => x.length === 4));
+  check('omaha: no duplicate cards dealt', new Set(all).size === all.length);
+  const first = s.players.find((x) => x.id === s.turnId)!;
+  const cap = potLimitTo(s, first);
+  check('omaha: first pot raise is to 7 with 1/2 blinds', cap === 7, String(cap));
+  check('omaha: raise over the pot is rejected', tryAct(() => actHoldem(f, first.id, { type: 'raise', to: cap + 1 }, 0)) !== null);
+  check('omaha: all-in over the pot is rejected', tryAct(() => actHoldem(f, first.id, { type: 'allin' }, 0)) !== null);
+  check('omaha: pot raise is allowed', tryAct(() => actHoldem(f, first.id, { type: 'raise', to: cap }, 0)) === null);
+  const second = s.players.find((x) => x.id === s.turnId)!;
+  const cap2 = potLimitTo(s, second);
+  // הקופה אחרי שמשווים: 1 + 2 + 7 + (7 - ההימור שלו)
+  const expect2 = 7 + (1 + 2 + 7) + (7 - second.bet);
+  check('omaha: re-raise cap = current bet + pot after call', cap2 === expect2, cap2 + ' vs ' + expect2);
+  check('omaha: re-raise to the cap is allowed', tryAct(() => actHoldem(f, second.id, { type: 'raise', to: cap2 }, 0)) === null);
+}
+
+// 10. אומהה: מי שיש לו פחות מגודל הקופה יכול ללכת אול-אין
+{
+  const { full: f } = createHoldem(P('A'), { sb: 5, bb: 10, buyIn: 1000, variant: 'omaha' });
+  joinHoldem(f, P('B'), 1000);
+  joinHoldem(f, P('C'), 1000);
+  const s = f.pub;
+  actHoldem(f, 'A', { type: 'start' }, 0);
+  const first = s.players.find((x) => x.id === s.turnId)!;
+  first.chips = 20; // ערימה קטנה מגודל הקופה (35)
+  check('omaha: short stack may go all-in under the pot', tryAct(() => actHoldem(f, first.id, { type: 'allin' }, 0)) === null && first.allIn);
+  // כולם מקפלים - היד נרשמת כאומהה
+  while (s.phase !== 'showdown') actHoldem(f, s.turnId!, { type: 'fold' }, 0);
+  check('omaha: hand record is marked as omaha', s.lastHand?.variant === 'omaha');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED');

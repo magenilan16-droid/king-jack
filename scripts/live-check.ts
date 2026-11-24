@@ -62,6 +62,31 @@ for (const gameType of ['holdem', 'blackjack'] as const) {
   check(`${gameType}: row is gone`, !gone);
 }
 
+// אומהה: השרת שומר את סוג המשחק, מחלק 4 קלפים, ולא נותן להעלות מעל גודל הקופה
+{
+  const c = await call({ op: 'create', gameType: 'holdem', name: 'QA live omaha', moneyMode: 'demo', settings: { bb: 2, buyIn: 200, variant: 'omaha' } });
+  const roomId = c.roomId as string;
+  await call({ op: 'act', roomId, move: { type: 'addBot' } });
+  await call({ op: 'act', roomId, move: { type: 'start' } });
+  const { data: room } = await sb.from('game_rooms').select('state').eq('id', roomId).single();
+  const st = room!.state as { phase: string; turnId: string; settings: { variant?: string } };
+  check('omaha: server keeps the variant', st.settings.variant === 'omaha');
+  const { data: priv } = await sb.from('game_private').select('data').eq('room_id', roomId).maybeSingle();
+  const hole = (priv?.data as { hole?: string[] } | undefined)?.hole ?? [];
+  check('omaha: I get 4 hole cards', hole.length === 4, hole.length + ' cards');
+  if (st.turnId === login.data.user!.id) {
+    let rejected = false;
+    try {
+      await call({ op: 'act', roomId, move: { type: 'allin' } }); // 200 ז׳טונים, הקופה קטנה בהרבה
+    } catch (e) {
+      rejected = /אומהה|קופה/.test((e as Error).message);
+    }
+    check('omaha: all-in over the pot is rejected by server', rejected);
+  } else check('omaha: (bot acted first, pot-limit check skipped)', true);
+  const rm = await call({ op: 'removeRoom', roomId });
+  check('omaha: removeRoom deletes practice table', rm.deleted === true);
+}
+
 // מי שלא פתח את השולחן לא יכול למחוק (שולחן לא קיים = 404)
 try {
   await call({ op: 'removeRoom', roomId: '00000000-0000-0000-0000-000000000000' });

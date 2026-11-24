@@ -35,6 +35,9 @@ export function Pick<T extends string | number | null>({
   );
 }
 
+// המשחקים שאפשר לפתוח. אומהה = שולחן פוקר עם 4 קלפים ביד
+export type GamePick = 'holdem' | 'omaha' | 'blackjack';
+
 export function FormRow({ label, sub, children }: { label: string; sub?: string; children: ReactNode }) {
   return (
     <div className="fl-row">
@@ -56,8 +59,8 @@ export function CreateSheet({
   myName,
 }: {
   open: boolean;
-  type: 'holdem' | 'blackjack';
-  setType: (t: 'holdem' | 'blackjack') => void;
+  type: GamePick;
+  setType: (t: GamePick) => void;
   onClose: () => void;
   onCreated: (id: string) => void;
   myName: string;
@@ -76,14 +79,14 @@ export function CreateSheet({
   const [maxRebuys, setMaxRebuys] = useState<number | null>(null);
   const defaultName = tr(`השולחן של ${myName}`, `${myName}'s table`);
 
+  const poker = type !== 'blackjack';
   const create = async () => {
-    const settings =
-      type === 'holdem'
-        ? { bb, buyIn, turnSeconds, blindUpMinutes: blindUp, maxRebuys }
-        : { minBet, maxBet: Math.max(maxBet, minBet), buyIn, dealerMode, turnSeconds, maxRebuys };
+    const settings = poker
+      ? { bb, buyIn, turnSeconds, blindUpMinutes: blindUp, maxRebuys, ...(type === 'omaha' ? { variant: 'omaha' } : {}) }
+      : { minBet, maxBet: Math.max(maxBet, minBet), buyIn, dealerMode, turnSeconds, maxRebuys };
     const r = await gameCall<{ roomId: string; code: string }>({
       op: 'create',
-      gameType: type,
+      gameType: poker ? 'holdem' : 'blackjack',
       name: name.trim() || defaultName,
       moneyMode: money,
       settings,
@@ -113,6 +116,15 @@ export function CreateSheet({
             <span className="gp-card red">K</span>
           </span>
           <b>{tr('טקסס הולדם', "Texas Hold'em")}</b>
+        </button>
+        <button type="button" className={`gp omaha ${type === 'omaha' ? 'active' : ''}`} aria-pressed={type === 'omaha'} onClick={() => setType('omaha')}>
+          <span className="gp-felt" aria-hidden="true">
+            <span className="gp-card">A</span>
+            <span className="gp-card red">A</span>
+            <span className="gp-card">K</span>
+            <span className="gp-card red">Q</span>
+          </span>
+          <b>{tr('אומהה', 'Omaha')}</b>
         </button>
         <button
           type="button"
@@ -153,7 +165,7 @@ export function CreateSheet({
         <FormRow label={tr('קנייה', 'Buy-in')} sub={tr('זהה לכולם', 'Same for everyone')}>
           <NumberStepper value={buyIn} onChange={setBuyIn} step={50} min={10} label={tr('קנייה', 'Buy-in')} />
         </FormRow>
-        {type === 'holdem' ? (
+        {poker ? (
           <>
             <FormRow label={tr('ביג בליינד', 'Big blind')} sub={tr(`סמול ${fmt(bb / 2)}`, `Small ${fmt(bb / 2)}`)}>
               <NumberStepper value={bb} onChange={setBb} step={2} min={2} label={tr('ביג בליינד', 'Big blind')} />

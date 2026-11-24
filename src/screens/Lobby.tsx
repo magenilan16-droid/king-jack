@@ -8,7 +8,7 @@ import { ChipStack } from '../components/Chips';
 import { fmt, signed } from '../lib/balances';
 import { useI18n, count } from '../lib/i18n';
 import { Sheet, AsyncButton, toast } from '../components/ui';
-import { CreateSheet } from './CreateSheet';
+import { CreateSheet, type GamePick } from './CreateSheet';
 import type { RoomState } from '../lib/useRoom';
 
 interface LobbyRoom {
@@ -39,7 +39,7 @@ export function Lobby({
   const { tr, lang } = useI18n();
   const [rooms, setRooms] = useState<LobbyRoom[] | null>(null);
   const [sheet, setSheet] = useState<null | 'create' | 'join'>(null);
-  const [createType, setCreateType] = useState<'holdem' | 'blackjack'>('holdem');
+  const [createType, setCreateType] = useState<GamePick>('holdem');
   const [joinCode, setJoinCode] = useState('');
   const [joinRoom, setJoinRoom] = useState<LobbyRoom | null>(null);
   const push = usePushSetup(onInstall);
@@ -126,7 +126,9 @@ export function Lobby({
   const greet =
     hour < 5 ? tr('לילה טוב', 'Good night') : hour < 12 ? tr('בוקר טוב', 'Good morning') : hour < 18 ? tr('צהריים טובים', 'Good afternoon') : tr('ערב טוב', 'Good evening');
   const Chev = lang === 'he' ? ChevronLeft : ChevronRight;
-  const gameName = (t: string) => (t === 'blackjack' ? tr('בלאק ג׳ק', 'Blackjack') : tr('טקסס הולדם', "Texas Hold'em"));
+  const isOmahaRoom = (r: LobbyRoom) => (r.state.settings as { variant?: string }).variant === 'omaha';
+  const gameName = (r: LobbyRoom) =>
+    r.game_type === 'blackjack' ? tr('בלאק ג׳ק', 'Blackjack') : isOmahaRoom(r) ? tr('אומהה', 'Omaha') : tr('טקסס הולדם', "Texas Hold'em");
   const limitsOf = (r: LobbyRoom): { l: string; v: string } =>
     'sb' in r.state.settings
       ? { l: tr('בליינדים', 'Blinds'), v: `${r.state.settings.sb}/${r.state.settings.bb}` }
@@ -143,7 +145,7 @@ export function Lobby({
         : debt.owed > 0
           ? tr('לקבל', 'To collect')
           : tr('הכל סגור', 'All settled');
-  const openCreate = (t: 'holdem' | 'blackjack') => {
+  const openCreate = (t: GamePick) => {
     setCreateType(t);
     setSheet('create');
   };
@@ -234,7 +236,19 @@ export function Lobby({
             </span>
             <span className="gt-text">
               <b>{tr('טקסס הולדם', "Texas Hold'em")}</b>
-              <small>{tr('עד 10 שחקנים', 'Up to 10 players')}</small>
+              <small>{tr('2 קלפים ביד', '2 hole cards')}</small>
+            </span>
+          </button>
+          <button className="game-tile omaha" onClick={() => openCreate('omaha')}>
+            <span className="gt-felt" aria-hidden="true">
+              <span className="gp-card">A</span>
+              <span className="gp-card red">A</span>
+              <span className="gp-card">K</span>
+              <span className="gp-card red">Q</span>
+            </span>
+            <span className="gt-text">
+              <b>{tr('אומהה', 'Omaha')}</b>
+              <small>{tr('4 קלפים ביד', '4 hole cards')}</small>
             </span>
           </button>
           <button className="game-tile blackjack" onClick={() => openCreate('blackjack')}>
@@ -243,7 +257,7 @@ export function Lobby({
             </span>
             <span className="gt-text">
               <b>{tr('בלאק ג׳ק', 'Blackjack')}</b>
-              <small>{tr('מול הבית או חבר כבנק', 'House or a friend as bank')}</small>
+              <small>{tr('מול הבית או חבר', 'House or a friend')}</small>
             </span>
           </button>
         </div>
@@ -294,8 +308,8 @@ export function Lobby({
                   }
                 }}
               >
-                <div className={`room-badge ${r.game_type}`} aria-hidden="true">
-                  {r.game_type === 'blackjack' ? '21' : '♠'}
+                <div className={`room-badge ${r.game_type} ${isOmahaRoom(r) ? 'omaha' : ''}`} aria-hidden="true">
+                  {r.game_type === 'blackjack' ? '21' : isOmahaRoom(r) ? 'PLO' : '♠'}
                 </div>
                 <div className="grow">
                   <div className="room-name" dir="auto">
@@ -303,7 +317,7 @@ export function Lobby({
                     {r.money_mode === 'demo' && <span className="tag">{tr('אימון', 'Practice')}</span>}
                   </div>
                   <div className="room-sub room-facts">
-                    <span>{gameName(r.game_type)}</span>
+                    <span>{gameName(r)}</span>
                     <span>
                       {lim.l} <b dir="ltr">{lim.v}</b>
                     </span>
@@ -435,7 +449,7 @@ export function Lobby({
             <div className="facts">
               <div>
                 <span>{tr('משחק', 'Game')}</span>
-                <b>{gameName(joinRoom.game_type)}</b>
+                <b>{gameName(joinRoom)}</b>
               </div>
               <div>
                 <span>{limitsOf(joinRoom).l}</span>

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import type { Card } from '../engine/cards';
 import { basicStrategy, strategyExplain, MOVE_HE, MOVE_EN } from '../engine/strategy';
 import { equityAsync } from '../lib/equityAsync';
-import { bestHand } from '../engine/handEval';
+import { bestFor } from '../engine/handEval';
 import type { Theme } from '../lib/themes';
 import { useI18n } from '../lib/i18n';
 import { handName } from '../lib/display';
@@ -69,18 +69,22 @@ export function HoldemTip({
   const key = hole.join('') + board.join('') + opponents;
   useEffect(() => {
     setEq(null);
-    if (hole.length !== 2) return;
-    // חישוב בעובד רקע כדי לא לתקוע את המסך
+    if (hole.length < 2) return;
+    // חישוב בעובד רקע כדי לא לתקוע את המסך (באומהה כל יד יקרה יותר - פחות סימולציות)
     let alive = true;
-    equityAsync(hole, board, Math.max(1, opponents), 2000).then((v) => alive && setEq(v));
+    equityAsync(hole, board, Math.max(1, opponents), hole.length === 4 ? 700 : 2000).then((v) => alive && setEq(v));
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
-  if (hole.length !== 2) return null;
+  if (hole.length < 2) return null;
   const made =
-    board.length >= 3 ? handName(bestHand(hole.concat(board)).cat, lang) : hole[0][0] === hole[1][0] ? tr('זוג ביד', 'Pocket pair') : null;
+    board.length >= 3
+      ? handName(bestFor(hole, board).cat, lang)
+      : hole.length === 2 && hole[0][0] === hole[1][0]
+        ? tr('זוג ביד', 'Pocket pair')
+        : null;
   const potOdds = toCall > 0 ? toCall / (pot + toCall) : 0;
   let advice = '';
   let tone: 'good' | 'mid' | 'bad' = 'mid';

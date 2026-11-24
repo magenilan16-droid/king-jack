@@ -82,6 +82,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
           </div>
           <div className="sub">
             <span className="facts-line">
+              {rec.variant === 'omaha' && <span>{tr('אומהה', 'Omaha')}</span>}
               <span>{timeFmt(at, lang)}</span>
               <span>
                 {tr('קופה', 'Pot')} {fmt(rec.pot)}

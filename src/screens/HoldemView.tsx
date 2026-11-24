@@ -1,7 +1,7 @@
-// שולחן טקסס הולדם - מסך מלא, השחקנים סביב שולחן אובלי ואני למטה
+// שולחן טקסס הולדם / אומהה - מסך מלא, השחקנים סביב שולחן אובלי ואני למטה
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Sparkles, Crown, Eye } from 'lucide-react';
-import { type HState, type HPlayer, potSize, computePots } from '../engine/holdem';
+import { type HState, type HPlayer, potSize, computePots, isOmaha, potLimitTo } from '../engine/holdem';
 import type { Card as C } from '../engine/cards';
 import { turnMs, MAX_STRIKES } from '../engine/common';
 import { canRebuyNow } from '../engine/room';
@@ -15,7 +15,7 @@ import { AsyncButton, toast } from '../components/ui';
 import type { Theme } from '../lib/themes';
 import { pick } from '../lib/themes';
 import { fmt } from '../lib/balances';
-import { bestHand } from '../engine/handEval';
+import { bestFor } from '../engine/handEval';
 import { useI18n, type Lang } from '../lib/i18n';
 import { actionLabel, displayName, handName } from '../lib/display';
 import { sfx } from '../lib/sound';
@@ -87,7 +87,13 @@ export function HoldemView({
   const turnPlayer = s.players.find((p) => p.id === s.turnId);
   const pot = potSize(s);
   const toCall = me ? Math.max(0, s.currentBet - me.bet) : 0;
-  const maxTo = me ? me.bet + me.chips : 0;
+  const omaha = isOmaha(s);
+  const nHole = omaha ? 4 : 2;
+  // באומהה כל אחד מקבל 4 קלפים - מחלקים קצת יותר מהר כדי שהחלוקה לא תימרח
+  const step = omaha ? 55 : DEAL_STEP;
+  const stackTo = me ? me.bet + me.chips : 0;
+  // באומהה (פוט-לימיט) אי אפשר להעלות מעל גודל הקופה
+  const maxTo = me && omaha ? Math.min(stackTo, potLimitTo(s, me)) : stackTo;
   const minTo = Math.min(maxTo, s.currentBet + s.minRaise);
   const [raiseOpen, setRaiseOpen] = useState(false);
   const [raiseTo, setRaiseTo] = useState(minTo);
@@ -137,8 +143,8 @@ export function HoldemView({
     if (!p) return;
     if (s.handNo !== p.handNo) {
       sfx.shuffle();
-      const cards = Math.min(14, s.players.filter((x) => x.inHand).length * 2);
-      for (let k = 0; k < cards; k++) setTimeout(() => sfx.card(), DEAL_BASE + k * DEAL_STEP);
+      const cards = Math.min(omaha ? 16 : 14, s.players.filter((x) => x.inHand).length * nHole);
+      for (let k = 0; k < cards; k++) setTimeout(() => sfx.card(), DEAL_BASE + k * step);
     } else if (s.board.length > p.board.length) {
       for (let k = 0; k < s.board.length - p.board.length; k++) setTimeout(() => sfx.card('place'), k * 160);
     }
@@ -206,7 +212,7 @@ export function HoldemView({
   const iAsked = !!req && req.to === foldWinner?.id && req.from.includes(myId);
   const askedMe = req && req.to === myId ? req.from.length : 0;
   const readyPlayers = s.players.filter((p) => p.chips > 0 && !p.sitOut).length;
-  const made = hole.length === 2 && s.board.length >= 3 ? handName(bestHand(hole.concat(s.board)).cat, lang) : null;
+  const made = hole.length >= 2 && s.board.length >= 3 ? handName(bestFor(hole, s.board).cat, lang) : null;
   // העלאה בגודל הקופה = הקופה אחרי שמשווים, מעל ההימור הנוכחי
   const potAfterCall = pot + toCall;
   const potPresets = [
@@ -240,6 +246,7 @@ export function HoldemView({
             )}
           </div>
           <div className="pk-meta">
+            {omaha && <span className="pk-variant">{tr('אומהה', 'Omaha')}</span>}
             <span>{phaseLabel(s.phase, lang)}</span>
             <BlindsClock s={s} />
           </div>
@@ -270,6 +277,8 @@ export function HoldemView({
             isDealer={dealerId === p.id && s.phase !== 'waiting'}
             dealIdx={dealIdx.get(p.id) ?? 0}
             nDealt={nDealt}
+            nHole={nHole}
+            step={step}
             isKing={kingId === p.id}
             handNo={s.handNo}
             waiting={s.phase === 'waiting'}
@@ -319,10 +328,10 @@ export function HoldemView({
           })}
 
         {/* הקלפים שלי - גדולים, מעל המושב שלי */}
-        {me && hole.length === 2 && (
-          <div className={`pk-hole ${me.folded ? 'folded' : ''} ${winnerIds.has(myId) ? 'won' : ''}`} style={cq(0, CENTER.y - 88)}>
+        {me && hole.length >= 2 && (
+          <div className={`pk-hole ${hole.length === 4 ? 'four' : ''} ${me.folded ? 'folded' : ''} ${winnerIds.has(myId) ? 'won' : ''}`} style={cq(0, CENTER.y - 88)}>
             {hole.map((c, i) => (
-              <Card key={c + i} card={c} size="lg" deal flip delay={DEAL_BASE + i * nDealt * DEAL_STEP} />
+              <Card key={c + i} card={c} size="lg" deal flip delay={DEAL_BASE + i * nDealt * step} />
             ))}
             {made && !me.folded && <span className="pk-made">{made}</span>}
           </div>
@@ -367,22 +376,25 @@ export function HoldemView({
           <>
             <TurnBar deadline={s.turnDeadline} total={total} roomId={roomId} mine />
             <div className="pk-hintrow">
-              {tipsOn && hole.length === 2 ? <HoldemTip hole={hole} board={s.board} opponents={opponents} toCall={toCall} pot={pot} compact /> : <span />}
+              {tipsOn && hole.length >= 2 ? <HoldemTip hole={hole} board={s.board} opponents={opponents} toCall={toCall} pot={pot} compact /> : <span />}
               {hole.length === 2 && <Coach roomId={roomId} premium={premium} contextKey={`${s.handNo}-${s.board.length}-${s.currentBet}`} compact />}
             </div>
             {raiseOpen ? (
               <div className="pk-raise">
                 <div className="pk-raise-top">
-                  <span className="pk-raise-amt">{raiseTo >= maxTo ? tr('אול-אין', 'All-in') : fmt(raiseTo)}</span>
+                  <span className="pk-raise-amt">{raiseTo >= stackTo ? tr('אול-אין', 'All-in') : fmt(raiseTo)}</span>
                   <div className="pk-presets">
                     {potPresets.map((pp) => (
                       <button key={pp.label} onClick={() => setRaiseTo(Math.min(maxTo, Math.max(minTo, pp.to)))}>
                         {pp.label}
                       </button>
                     ))}
-                    <button className="allin" onClick={() => setRaiseTo(maxTo)}>
-                      {tr('הכל', 'All')}
-                    </button>
+                    {/* באומהה הכפתור "קופה" הוא כבר המקסימום */}
+                    {!omaha && (
+                      <button className="allin" onClick={() => setRaiseTo(maxTo)}>
+                        {tr('הכל', 'All')}
+                      </button>
+                    )}
                   </div>
                 </div>
                 <input
@@ -399,8 +411,8 @@ export function HoldemView({
                   <button className="pk-btn ghost" onClick={() => setRaiseOpen(false)}>
                     {tr('ביטול', 'Cancel')}
                   </button>
-                  <AsyncButton className="pk-btn gold" onClick={() => act(raiseTo >= maxTo ? { type: 'allin' } : { type: 'raise', to: raiseTo })}>
-                    {raiseTo >= maxTo
+                  <AsyncButton className="pk-btn gold" onClick={() => act(raiseTo >= stackTo ? { type: 'allin' } : { type: 'raise', to: Math.min(raiseTo, maxTo) })}>
+                    {raiseTo >= stackTo
                       ? tr('אול-אין', 'All-in')
                       : s.currentBet > 0
                         ? tr(`העלאה ל-${fmt(raiseTo)}`, `Raise to ${fmt(raiseTo)}`)
@@ -443,7 +455,7 @@ export function HoldemView({
 
         {showdown && me && (
           <div className="pk-btnrow">
-            {hole.length === 2 && !me.shown && (
+            {hole.length >= 2 && !me.shown && (
               <AsyncButton className={`pk-btn ${askedMe ? 'gold kj-asked' : 'ghost'}`} onClick={() => act({ type: 'show' })}>
                 {askedMe ? tr(`להראות (${askedMe} ביקשו)`, `Show (${askedMe} asked)`) : tr('הראה קלפים', 'Show cards')}
               </AsyncButton>
@@ -485,6 +497,8 @@ function Seat({
   onTap,
   dealIdx,
   nDealt,
+  nHole,
+  step,
   isKing,
   handNo,
 }: {
@@ -501,6 +515,8 @@ function Seat({
   onTap: () => void;
   dealIdx: number;
   nDealt: number;
+  nHole: number;
+  step: number;
   isKing: boolean;
   handNo: number;
 }) {
@@ -510,7 +526,7 @@ function Seat({
   const kind = actionKind(p.lastAction);
   return (
     <div
-      className={`pk-seat ${isMe ? 'me' : ''} ${isTurn ? 'turn' : ''} ${out ? 'out' : ''} ${winAmount ? 'winner' : ''} ${pos.y < 40 ? 'top' : ''}`}
+      className={`pk-seat ${isMe ? 'me' : ''} ${isTurn ? 'turn' : ''} ${out ? 'out' : ''} ${winAmount ? 'winner' : ''} ${pos.y < 40 ? 'top' : ''} ${pos.x < 30 ? 'side-l' : pos.x > 70 ? 'side-r' : ''} ${!isMe && pos.y >= 38 && pos.y <= 54 ? 'mid' : ''}`}
       style={{ left: `${pos.x}%`, top: `${pos.y}%` }}
       data-pid={p.id}
       onClick={onTap}
@@ -520,15 +536,17 @@ function Seat({
       aria-label={displayName(p, lang)}
     >
       {!isMe && p.inHand && !p.folded && !p.shown && (
-        <span className="pk-backs" key={handNo} style={cq(CENTER.x - pos.x, CENTER.y - pos.y)}>
-          <Card card={null} size="xs" deal delay={DEAL_BASE + dealIdx * DEAL_STEP} />
-          <Card card={null} size="xs" deal delay={DEAL_BASE + (nDealt + dealIdx) * DEAL_STEP} />
+        <span className={`pk-backs ${nHole === 4 ? 'four' : ''}`} key={handNo} style={cq(CENTER.x - pos.x, CENTER.y - pos.y)}>
+          {Array.from({ length: nHole }).map((_, r) => (
+            <Card key={r} card={null} size="xs" deal delay={DEAL_BASE + (r * nDealt + dealIdx) * step} />
+          ))}
         </span>
       )}
       {!isMe && p.shown && (
-        <span className="pk-shown">
-          <Card card={p.shown[0]} size="sm" flip />
-          <Card card={p.shown[1]} size="sm" flip delay={110} />
+        <span className={`pk-shown ${p.shown.length === 4 ? 'four' : ''}`}>
+          {p.shown.map((c, i) => (
+            <Card key={c} card={c} size="sm" flip delay={i * 110} />
+          ))}
         </span>
       )}
       <span className="pk-av">

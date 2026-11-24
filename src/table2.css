@@ -1509,3 +1509,86 @@ a {
     height: 46px;
   }
 }
+
+/* ---------- אומהה: 4 קלפים ביד ---------- */
+/* הקלפים שלי במניפה של ארבעה - קצת יותר קטנים כדי שהכל ייכנס */
+.pk-hole.four .card.lg {
+  width: 54px;
+  height: 77px;
+}
+.pk-hole.four .card:first-child {
+  margin-right: 0;
+}
+.pk-hole.four .card + .card {
+  margin-left: -16px;
+}
+.pk-hole.four .card:nth-child(1) {
+  transform: rotate(-12deg) translateY(9px);
+}
+.pk-hole.four .card:nth-child(2) {
+  transform: rotate(-4deg) translateY(2px);
+}
+.pk-hole.four .card:nth-child(3) {
+  transform: rotate(4deg) translateY(2px);
+}
+.pk-hole.four .card:nth-child(4) {
+  transform: rotate(12deg) translateY(9px);
+}
+.pk-hole.four .pk-made {
+  top: -24px;
+}
+/* קלפים סגורים של יריב: ארבעה במניפה צפופה */
+.pk-backs.four .card + .card {
+  margin-left: -15px;
+  transform: rotate(6deg);
+}
+.pk-backs.four .card:nth-child(3) {
+  transform: rotate(12deg);
+}
+.pk-backs.four .card:nth-child(4) {
+  transform: rotate(18deg);
+}
+/* קלפים שנחשפו בסוף היד: חופפים, רואים את הפינה של כל קלף */
+.pk-shown.four {
+  gap: 0;
+}
+.pk-shown.four .card + .card {
+  margin-left: -12px;
+}
+/* תווית המשחק בשורת השלב */
+.pk-variant {
+  color: var(--brass-hi);
+  font-weight: 600;
+}
+@media (max-height: 700px) {
+  .pk-hole.four .card.lg {
+    width: 46px;
+    height: 66px;
+  }
+  .pk-hole.four .card + .card {
+    margin-left: -13px;
+  }
+}
+/* מושבים בקצוות: הקלפים פונים למרכז השולחן ולא יוצאים מהמסך */
+.pk-seat.side-l .pk-backs {
+  inset-inline-start: auto;
+  left: 46px;
+  right: auto;
+}
+.pk-seat.side-r .pk-backs {
+  inset-inline-start: auto;
+  right: 46px;
+  left: auto;
+}
+/* מושב בגובה הלוח: הקלפים שנחשפו עולים קצת כדי לא לכסות את קלפי הלוח */
+.pk-seat.mid .pk-shown {
+  bottom: calc(100% + 22px);
+}
+/* סכום הזכייה מתחת לשם - שלא יכסה את הקלפים שנחשפו */
+.pk-seat:not(.top) .pk-win {
+  top: calc(100% + 2px);
+}
+/* ארבעה קלפים שלי: קצת יותר גבוה כדי שהתמונה שלי תסתיר פחות */
+.pk-hole.four {
+  bottom: calc(15% + 10px);
+}
