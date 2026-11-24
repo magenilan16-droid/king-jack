@@ -31,7 +31,7 @@ export function useRoomFx(roomId: string, myId: string) {
       setTimeout(() => setEvents((old) => old.filter((x) => x.id !== e.id)), 2800);
       if (e.kind === 'throw') {
         sfx.whoosh();
-        setTimeout(() => sfx.splat(), 650);
+        setTimeout(() => sfx.splat(e.item), 650);
         if (e.to === myId) setTimeout(() => vibrate(60), 650);
       } else if (e.kind === 'emote') sfx.pop();
       else if (e.kind === 'nudge' && e.to === myId) {

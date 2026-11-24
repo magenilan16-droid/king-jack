@@ -140,7 +140,7 @@ export function HoldemView({
       const cards = Math.min(14, s.players.filter((x) => x.inHand).length * 2);
       for (let k = 0; k < cards; k++) setTimeout(() => sfx.card(), DEAL_BASE + k * DEAL_STEP);
     } else if (s.board.length > p.board.length) {
-      for (let k = 0; k < s.board.length - p.board.length; k++) setTimeout(() => sfx.card(), k * 160);
+      for (let k = 0; k < s.board.length - p.board.length; k++) setTimeout(() => sfx.card('place'), k * 160);
     }
     // סוף סיבוב הימורים: הז׳טונים שלפני כל שחקן נאספים לקופה
     const streetEnded = s.handNo === p.handNo && (s.board.length > p.board.length || (s.phase === 'showdown' && p.phase !== 'showdown'));
@@ -176,6 +176,7 @@ export function HoldemView({
         vibrate([60, 40, 60, 40, 160]);
         setTimeout(() => chipBurst(document.querySelector('.pk-seat.me .pk-av'), { count: 14 }), 1000);
       } else if (me?.inHand) sfx.lose();
+      else sfx.pot();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s]);

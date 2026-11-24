@@ -1,4 +1,5 @@
-// צלילי פוקר שנוצרים בקוד (בלי קבצי שמע): ערבוב, חלוקה, ז׳טונים, אול-אין, ניצחון ועוד
+// צלילי שולחן אמיתיים: הקלטות של קלפים, ז׳טונים ודפיקות על השולחן (public/sfx, רישיון CC0 של Kenney).
+// כל צליל מגיע בכמה גרסאות ומתנגן עם שינוי קטן בגובה ובעוצמה - כדי ששום קלף לא יישמע בדיוק כמו הקודם.
 import { useSyncExternalStore } from 'react';
 
 let muted = localStorage.getItem('muted') === '1';
@@ -21,6 +22,25 @@ export function useMuted(): [boolean, (m: boolean) => void] {
   return [m, setMuted];
 }
 
+// כמה גרסאות יש מכל צליל בתיקייה public/sfx (deal-1.mp3, deal-2.mp3...)
+const SOUNDS = {
+  deal: 4, // קלף מחליק על הבד
+  place: 3, // קלף מונח על השולחן (פלופ, טרן, ריבר)
+  fold: 3, // קלפים נדחפים לערימה
+  shuffle: 2, // ערבוב (ריפל)
+  chip: 3, // ז׳טון בודד מונח
+  bet: 3, // ז׳טונים נזרקים ונוקשים זה בזה
+  stack: 3, // ערימה מונחת
+  handle: 3, // אוספים ערימת ז׳טונים ביד
+  riffle: 1, // משחקים עם הז׳טונים - "תורך"
+  knock: 3, // דפיקה על השולחן - צ׳ק
+  thud: 2, // פגיעה רכה (עגבנייה, ביצה...)
+  soft: 2, // נגיעה קלה (ורד, נשיקה...)
+  glass: 2, // זכוכית (בירה)
+  cash: 1, // שטרות מתעופפים
+} as const;
+type Name = keyof typeof SOUNDS;
+
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
 function ac(): AudioContext | null {
@@ -35,6 +55,7 @@ function ac(): AudioContext | null {
       master = ctx.createGain();
       master.gain.value = 0.9;
       master.connect(comp).connect(ctx.destination);
+      load(ctx);
     }
     if (ctx.state === 'suspended') void ctx.resume();
     return ctx;
@@ -43,6 +64,21 @@ function ac(): AudioContext | null {
   }
 }
 const out = () => master!;
+
+// טעינת ההקלטות פעם אחת (כ-120KB), מיד אחרי הנגיעה הראשונה במסך
+const bufs = new Map<Name, AudioBuffer[]>();
+function load(c: AudioContext) {
+  for (const [name, n] of Object.entries(SOUNDS) as [Name, number][]) {
+    for (let i = 1; i <= n; i++) {
+      fetch(new URL(`sfx/${name}-${i}.mp3`, document.baseURI))
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+        // הצורה עם callback עובדת גם בספארי ישן
+        .then((a) => new Promise<AudioBuffer>((res, rej) => c.decodeAudioData(a, res, rej)))
+        .then((b) => bufs.set(name, [...(bufs.get(name) ?? []), b]))
+        .catch(() => {});
+    }
+  }
+}
 
 // דפדפנים בטלפון מאפשרים צליל רק אחרי נגיעה ראשונה במסך
 export function unlockAudio() {
@@ -53,194 +89,139 @@ export function unlockAudio() {
   window.addEventListener('pointerdown', once);
 }
 
+const lastPick = new Map<Name, number>();
+// מנגן הקלטה: at = בעוד כמה שניות, vol = עוצמה, rate = מהירות/גובה
+function play(name: Name, at = 0, vol = 1, rate = 1) {
+  const c = ac();
+  const list = bufs.get(name);
+  if (!c || !list?.length) return;
+  // גרסה אקראית, אבל לא אותה גרסה פעמיים ברצף
+  let i = Math.floor(Math.random() * list.length);
+  if (list.length > 1 && i === lastPick.get(name)) i = (i + 1) % list.length;
+  lastPick.set(name, i);
+  const src = c.createBufferSource();
+  src.buffer = list[i];
+  src.playbackRate.value = rate * (0.96 + Math.random() * 0.08);
+  const g = c.createGain();
+  g.gain.value = vol * (0.85 + Math.random() * 0.15);
+  src.connect(g).connect(out());
+  src.start(c.currentTime + at);
+}
+
+// רוח קלה של חפץ שעף באוויר (רעש מסונן - אין לזה הקלטה)
 let noiseBuf: AudioBuffer | null = null;
-function noise(c: AudioContext) {
+function airWhoosh(c: AudioContext) {
   if (!noiseBuf) {
     noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   }
-  const src = c.createBufferSource();
-  src.buffer = noiseBuf;
-  return src;
-}
-
-// פרץ רעש מסונן (בסיס לקלפים, החלקות ומכות)
-function burst(c: AudioContext, t: number, dur: number, freq: number, q: number, vol: number, type: BiquadFilterType = 'bandpass') {
-  const n = noise(c);
+  const t = c.currentTime;
+  const n = c.createBufferSource();
+  n.buffer = noiseBuf;
   const f = c.createBiquadFilter();
-  f.type = type;
-  f.frequency.value = freq;
-  f.Q.value = q;
+  f.type = 'bandpass';
+  f.Q.value = 2;
+  f.frequency.setValueAtTime(500, t);
+  f.frequency.exponentialRampToValueAtTime(2200, t + 0.45);
   const g = c.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(vol, t + 0.004);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  g.gain.exponentialRampToValueAtTime(0.12, t + 0.22);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
   n.connect(f).connect(g).connect(out());
-  n.start(t, Math.random() * 0.5);
-  n.stop(t + dur + 0.02);
-}
-
-function tone(c: AudioContext, freq: number, t: number, dur: number, vol: number, type: OscillatorType = 'sine', slideTo?: number) {
-  const o = c.createOscillator();
-  const g = c.createGain();
-  o.type = type;
-  o.frequency.setValueAtTime(freq, t);
-  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(out());
-  o.start(t);
-  o.stop(t + dur + 0.02);
-}
-
-// נקישת ז׳טון קרמי: שני צלילים גבוהים קצרים + מעט רעש
-function clink(c: AudioContext, t: number, vol = 0.12) {
-  const base = 2400 + Math.random() * 1600;
-  tone(c, base, t, 0.05, vol, 'triangle');
-  tone(c, base * 1.48, t + 0.003, 0.04, vol * 0.6, 'sine');
-  burst(c, t, 0.025, 5000, 2, vol * 0.8);
+  n.start(t);
+  n.stop(t + 0.55);
 }
 
 export const sfx = {
-  // קלף נשלף ומונח על הלבד
-  card() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    burst(c, t, 0.07, 2800, 0.9, 0.32);
-    burst(c, t + 0.05, 0.04, 900, 1.2, 0.18, 'lowpass');
+  // קלף מחולק (deal) או מונח פתוח על השולחן (place)
+  card(kind: 'deal' | 'place' = 'deal') {
+    if (kind === 'place') play('place', 0, 0.75);
+    else play('deal', 0, 0.55);
   },
-  // ערבוב חפיסה (ריפל) בתחילת יד
+  // ערבוב חפיסה בתחילת יד
   shuffle() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    for (let i = 0; i < 18; i++) burst(c, t + i * 0.028 + Math.random() * 0.01, 0.03, 3000 + Math.random() * 1500, 1.5, 0.12 + Math.random() * 0.05);
-    burst(c, t + 0.55, 0.09, 700, 1, 0.25, 'lowpass');
+    play('shuffle', 0, 0.6);
   },
-  // כמה ז׳טונים נזרקים לקופה
+  // ז׳טונים נכנסים לקופה: אחד מונח, כמה נזרקים, הרבה = גם ערימה
   chips(count = 3) {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    for (let i = 0; i < count; i++) clink(c, t + i * (0.035 + Math.random() * 0.03), 0.1 + Math.random() * 0.05);
+    if (count <= 1) play('chip', 0, 0.6);
+    else play('bet', 0, 0.7);
+    if (count >= 4) play('stack', 0.07, 0.55);
   },
-  // ערימה גדולה (אול-אין / איסוף קופה)
+  // ערימה נבנית (קנייה, מלך הערב)
   chipStack() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    for (let i = 0; i < 12; i++) clink(c, t + i * 0.028 + Math.random() * 0.015, 0.09);
+    play('stack', 0, 0.7);
+    play('stack', 0.1, 0.6);
+    play('stack', 0.2, 0.5);
   },
+  // צ׳ק: שתי דפיקות על השולחן
   check() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    // שתי דפיקות על השולחן
-    tone(c, 140, t, 0.08, 0.4, 'sine', 90);
-    burst(c, t, 0.03, 400, 1, 0.3, 'lowpass');
-    tone(c, 130, t + 0.12, 0.08, 0.35, 'sine', 85);
-    burst(c, t + 0.12, 0.03, 400, 1, 0.25, 'lowpass');
+    play('knock', 0, 0.9);
+    play('knock', 0.13, 0.75);
   },
+  // פולד: הקלפים נזרקים לערימה
   fold() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    const n = noise(c);
-    const f = c.createBiquadFilter();
-    f.type = 'lowpass';
-    f.frequency.setValueAtTime(4000, t);
-    f.frequency.exponentialRampToValueAtTime(300, t + 0.22);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.28, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
-    n.connect(f).connect(g).connect(out());
-    n.start(t);
-    n.stop(t + 0.25);
+    play('fold', 0, 0.6);
   },
+  // אול-אין: אוספים את כל הערימה ודוחפים קדימה
   allIn() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    tone(c, 110, t, 0.5, 0.3, 'sawtooth', 220);
-    tone(c, 220, t + 0.05, 0.45, 0.12, 'square', 440);
-    setTimeout(() => sfx.chipStack(), 280);
+    play('handle', 0, 0.75);
+    play('bet', 0.22, 0.8);
+    play('stack', 0.34, 0.75);
+    play('bet', 0.44, 0.6);
   },
+  // תורך: משחקים עם הז׳טונים
   turn() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    tone(c, 880, t, 0.18, 0.18);
-    tone(c, 1320, t + 0.13, 0.26, 0.16);
+    play('riffle', 0, 0.85);
   },
+  // השניות האחרונות של התור: נקישה קטנה ושקטה
   tick() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    tone(c, 1800, t, 0.03, 0.08, 'square');
+    play('knock', 0, 0.22, 1.7);
   },
+  // ניצחון: הקופה נאספת ונערמת מולך - מתוזמן לרגע שהז׳טונים נוחתים במושב (כשנייה וחצי)
   win() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    [523, 659, 784, 1047].forEach((f, i) => tone(c, f, t + i * 0.09, 0.3, 0.16, 'triangle'));
-    tone(c, 1568, t + 0.38, 0.5, 0.1, 'sine');
-    setTimeout(() => sfx.chipStack(), 200);
+    play('handle', 0.5, 0.7);
+    play('stack', 1.25, 0.85);
+    play('stack', 1.4, 0.75);
+    play('bet', 1.55, 0.65);
   },
+  // הפסד: הקלפים שלך נזרקים, הז׳טונים עוזבים
   lose() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    tone(c, 392, t, 0.22, 0.14, 'triangle');
-    tone(c, 330, t + 0.18, 0.22, 0.12, 'triangle');
-    tone(c, 262, t + 0.36, 0.4, 0.12, 'triangle');
+    play('fold', 0, 0.45);
+    play('bet', 1.25, 0.35);
   },
+  // הקופה הולכת לשחקן אחר (כשלא היית ביד)
+  pot() {
+    play('handle', 0.5, 0.4);
+    play('stack', 1.3, 0.4);
+  },
+  // הבליינדים עלו: ערימות חדשות על השולחן
   blindsUp() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    [659, 880, 1175].forEach((f, i) => tone(c, f, t + i * 0.1, 0.25, 0.14, 'square'));
+    play('handle', 0, 0.6);
+    play('stack', 0.3, 0.7);
+    play('stack', 0.42, 0.6);
   },
-  // זריקה: שריקה באוויר
+  // זריקה: רוח באוויר
   whoosh() {
     const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    const n = noise(c);
-    const f = c.createBiquadFilter();
-    f.type = 'bandpass';
-    f.Q.value = 3;
-    f.frequency.setValueAtTime(600, t);
-    f.frequency.exponentialRampToValueAtTime(3500, t + 0.45);
-    const g = c.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.25, t + 0.2);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
-    n.connect(f).connect(g).connect(out());
-    n.start(t);
-    n.stop(t + 0.55);
+    if (c) airWhoosh(c);
   },
-  // פגיעה (עגבנייה, בירה...)
-  splat() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    burst(c, t, 0.18, 500, 0.7, 0.45, 'lowpass');
-    tone(c, 180, t, 0.15, 0.25, 'sine', 60);
+  // פגיעה, לפי מה שנזרק
+  splat(item?: string) {
+    if (item === '🍺') play('glass', 0, 0.7);
+    else if (item === '💸') play('cash', 0, 0.7);
+    else if (item === '🌹' || item === '💋' || item === '🧻' || item === '🔥') play('soft', 0, 0.7);
+    else play('thud', 0, 0.8);
   },
+  // אימוג׳י / בקשה קטנה: נקישת ז׳טון קלה
   pop() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    tone(c, 600, t, 0.08, 0.2, 'sine', 1200);
+    play('chip', 0, 0.45, 1.15);
   },
-  // זמזום של זירוז
+  // זירוז: דפיקות חסרות סבלנות על השולחן
   nudge() {
-    const c = ac();
-    if (!c) return;
-    const t = c.currentTime;
-    for (let i = 0; i < 3; i++) tone(c, 220, t + i * 0.12, 0.08, 0.25, 'square');
+    play('knock', 0, 1);
+    play('knock', 0.12, 0.9);
+    play('knock', 0.24, 1);
   },
 };

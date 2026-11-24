@@ -1,0 +1,9 @@
+Sound effects in this folder are trimmed and re-encoded from two packs by Kenney (www.kenney.nl):
+
+  Casino Audio 1.1   - https://kenney.nl/assets/casino-audio
+  Impact Sounds 1.0  - https://kenney.nl/assets/impact-sounds
+
+License: Creative Commons Zero (CC0) - http://creativecommons.org/publicdomain/zero/1.0/
+Free for personal and commercial use. Credit is not required, but thank you, Kenney.
+
+Regenerate with: node scripts/make-sfx.mjs <casino>/Audio <impact>/Audio public/sfx
