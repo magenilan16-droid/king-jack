@@ -2184,3 +2184,29 @@ label {
     font-size: 11px;
   }
 }
+
+/* ---------- עוצמת צלילים ---------- */
+.vol-row {
+  gap: 14px;
+}
+.vol-row .mi {
+  flex: none;
+}
+.vol-slider {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+}
+.vol-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(90deg, var(--brass) var(--fill, 80%), rgba(243, 237, 224, 0.15) var(--fill, 80%));
+}
+.vol-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--brass);
+}
+.vol-slider::-webkit-slider-thumb {
+  width: 24px;
+  height: 24px;
+  margin-top: -9px;
+}

@@ -14,19 +14,19 @@ const I = (f) => join(impact, f + '.ogg');
 
 // שם בקובץ -> מקור (+ חלון זמן אופציונלי, + פילטר נוסף)
 const MAP = {
-  deal: [C('card-slide-1'), C('card-slide-2'), C('card-slide-5'), C('card-slide-7')],
-  place: [C('card-place-1'), C('card-place-2'), C('card-place-4')],
-  fold: [C('card-shove-1'), C('card-shove-2'), C('card-shove-3')],
+  deal: [1, 2, 3, 5, 6, 7].map((n) => C('card-slide-' + n)),
+  place: [1, 2, 3, 4].map((n) => C('card-place-' + n)),
+  fold: [1, 2, 3, 4].map((n) => C('card-shove-' + n)),
   shuffle: [
     { src: C('card-shuffle'), from: 2.64, to: 2.99 },
     { src: C('card-shuffle'), from: 0.86, to: 1.19 },
   ],
-  chip: [C('chip-lay-1'), C('chip-lay-2'), C('chip-lay-3')],
-  bet: [C('chips-collide-1'), C('chips-collide-2'), C('chips-collide-3')],
-  stack: [C('chips-stack-1'), C('chips-stack-3'), C('chips-stack-4')],
-  handle: [C('chips-handle-1'), C('chips-handle-2'), C('chips-handle-6')],
+  chip: [1, 2, 3].map((n) => C('chip-lay-' + n)),
+  bet: [1, 2, 3, 4].map((n) => C('chips-collide-' + n)),
+  stack: [1, 2, 3, 4, 5, 6].map((n) => C('chips-stack-' + n)),
+  handle: [1, 2, 3, 4, 6].map((n) => C('chips-handle-' + n)),
   riffle: [C('chips-handle-5')],
-  knock: [I('impactWood_light_000'), I('impactWood_light_001'), I('impactWood_light_002')].map((src) => ({ src, extra: 'lowpass=f=3200' })),
+  knock: [0, 1, 2, 3].map((n) => ({ src: I('impactWood_light_00' + n), extra: 'lowpass=f=3200' })),
   thud: [I('impactSoft_heavy_000'), I('impactSoft_heavy_001')],
   soft: [I('impactSoft_medium_000'), I('impactSoft_medium_001')],
   glass: [I('impactGlass_light_000'), I('impactGlass_light_001')],

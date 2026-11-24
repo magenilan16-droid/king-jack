@@ -13,7 +13,6 @@ import {
   LogOut,
   Flag,
   Bot,
-  Volume2,
   Lightbulb,
   Coffee,
   Play,
@@ -31,7 +30,8 @@ import { vibrate } from '../lib/prefs';
 import { fmt, signed } from '../lib/balances';
 import { useI18n } from '../lib/i18n';
 import { displayName } from '../lib/display';
-import { sfx, useMuted } from '../lib/sound';
+import { sfx, seatPan } from '../lib/sound';
+import { SoundSettings } from '../components/SoundSettings';
 import { useRoomFx, THROWABLES, EMOTES } from '../lib/fx';
 import { canRebuyNow, rebuysLeft } from '../engine/room';
 import { Sheet, AsyncButton, toast } from '../components/ui';
@@ -86,7 +86,6 @@ export function Table({
   const myId = profile.id;
   const { room, hole, ledger, refresh, connected } = useRoom(roomId, myId);
   const { events, send } = useRoomFx(roomId, myId);
-  const [muted, setMuted] = useMuted();
   const [sheet, setSheet] = useState<null | 'menu' | 'settle' | 'chat' | 'invite' | 'rebuy' | 'join' | 'history' | 'emote'>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [quip, setQuip] = useState(() => pick(theme.quips));
@@ -131,7 +130,7 @@ export function Table({
     if (kingReady.current && kp) {
       const k = Date.now();
       setKingCast({ id: kp.id, name: displayName(kp, lang), k });
-      sfx.chipStack();
+      sfx.chipStack(seatPan(kp.id));
       if (kp.id === myId) {
         vibrate([50, 40, 50, 40, 120]);
         setTimeout(() => chipBurst(document.querySelector(`[data-pid="${CSS.escape(myId)}"]`), { count: 10 }), 300);
@@ -452,12 +451,7 @@ export function Table({
             </span>
             <input type="checkbox" role="switch" checked={tipsOn} onChange={(e) => setTipsOn(e.target.checked)} />
           </label>
-          <label className="menu-item toggle">
-            <span className="mi">
-              <Volume2 size={19} /> {tr('צלילים', 'Sounds')}
-            </span>
-            <input type="checkbox" role="switch" checked={!muted} onChange={(e) => setMuted(!e.target.checked)} />
-          </label>
+          <SoundSettings />
         </div>
         <div className="seg" role="group" aria-label={tr('שפה', 'Language')}>
           <button className={lang === 'he' ? 'active' : ''} aria-pressed={lang === 'he'} onClick={() => setLang('he')}>

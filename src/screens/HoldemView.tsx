@@ -18,7 +18,7 @@ import { fmt } from '../lib/balances';
 import { bestFor } from '../engine/handEval';
 import { useI18n, type Lang } from '../lib/i18n';
 import { actionLabel, displayName, handName } from '../lib/display';
-import { sfx } from '../lib/sound';
+import { sfx, seatPan } from '../lib/sound';
 import { vibrate } from '../lib/prefs';
 import { useTween, chipBurst } from '../lib/motion';
 
@@ -135,18 +135,47 @@ export function HoldemView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.turnId, s.currentBet, s.phase]);
 
-  // צלילים ורטט לפי מה שהשתנה בשולחן
+  // צלילים ורטט לפי מה שהשתנה בשולחן. כל פעולה נשמעת מהמושב של מי שעשה אותה, לפי הסדר שבו קרו
   const prev = useRef<HState | null>(null);
+  // הפעולה שלי כבר נשמעה ברגע הלחיצה - לא לנגן אותה שוב כשהשרת מאשר
+  const myPress = useRef(0);
   useEffect(() => {
     const p = prev.current;
     prev.current = s;
     if (!p) return;
-    if (s.handNo !== p.handNo) {
+    const bb = Math.max(1, s.settings.bb);
+    const newHand = s.handNo !== p.handNo;
+    let after = 0; // ביד חדשה: הפעולות של הבוטים נשמעות רק אחרי החלוקה
+    if (newHand) {
       sfx.shuffle();
       const cards = Math.min(omaha ? 16 : 14, s.players.filter((x) => x.inHand).length * nHole);
       for (let k = 0; k < cards; k++) setTimeout(() => sfx.card(), DEAL_BASE + k * step);
+      after = DEAL_BASE + cards * step + 250;
     } else if (s.board.length > p.board.length) {
-      for (let k = 0; k < s.board.length - p.board.length; k++) setTimeout(() => sfx.card('place'), k * 160);
+      // קלפי הלוח: הצליל ברגע שהקלף נוחת (כמו העיכוב של האנימציה)
+      for (let i = p.board.length; i < s.board.length; i++) {
+        const d = (i - p.board.length) * 160 + (i >= 3 && p.board.length < 3 ? 250 : 0);
+        setTimeout(() => sfx.card('place'), d + 200);
+      }
+    }
+    // הפעולות החדשות ביד (גם כמה בוטים באותו עדכון), בלי הבליינדים
+    const fresh = (s.handLog ?? []).slice(newHand ? 0 : (p.handLog?.length ?? 0)).filter((e) => !/^(sb|bb):/.test(e.a));
+    let n = 0;
+    for (const e of fresh) {
+      if (e.id === myId && Date.now() - myPress.current < 8000) {
+        myPress.current = 0;
+        continue;
+      }
+      const [k, amt] = e.a.split(':');
+      const id = e.id;
+      setTimeout(() => {
+        const pan = seatPan(id);
+        if (k === 'check') sfx.check(pan);
+        else if (k === 'fold' || k === 'left') sfx.fold(pan, id === myId);
+        else if (k === 'allin') sfx.allIn(pan);
+        else if (k === 'call' || k === 'raise') sfx.bet(Number(amt) || bb, bb, pan);
+      }, after + n * 200);
+      n++;
     }
     // סוף סיבוב הימורים: הז׳טונים שלפני כל שחקן נאספים לקופה
     const streetEnded = s.handNo === p.handNo && (s.board.length > p.board.length || (s.phase === 'showdown' && p.phase !== 'showdown'));
@@ -160,32 +189,50 @@ export function HoldemView({
           return { id: x.id, x: lerp(pos.x, CENTER.x, t), y: lerp(pos.y, CENTER.y, t), amount: x.bet, k };
         }),
       );
-      setTimeout(() => sfx.chips(Math.min(6, oldBets.length + 1)), 260);
+      setTimeout(() => sfx.sweep(oldBets.length), Math.max(260, n * 200));
       setTimeout(() => setSweep((cur) => (cur[0]?.k === k ? [] : cur)), 700);
     }
-    const grew = potSize(s) - potSize(p);
-    if (grew > 0 && s.handNo === p.handNo) sfx.chips(Math.min(6, 2 + Math.round(grew / Math.max(1, s.settings.bb * 3))));
     if ((s.blindLevel ?? 0) > (p.blindLevel ?? 0)) {
       sfx.blindsUp();
       toast(tr(`הבליינדים עלו ל-${s.settings.sb}/${s.settings.bb}`, `Blinds are now ${s.settings.sb}/${s.settings.bb}`), 'win');
     }
+    // קלפים שנחשפו (בסוף היד או "הראה קלפים") - כל אחד מהמושב שלו
+    let r = 0;
     for (const pl of s.players) {
       const old = p.players.find((x) => x.id === pl.id);
-      if (!old || old.lastAction === pl.lastAction) continue;
-      if (pl.lastAction === 'check') sfx.check();
-      else if (pl.lastAction === 'fold') sfx.fold();
-      else if (pl.lastAction === 'allin') sfx.allIn();
+      if (pl.id === myId || !pl.shown || old?.shown || newHand) continue;
+      const id = pl.id;
+      setTimeout(() => sfx.reveal(seatPan(id)), r * 140);
+      r++;
     }
     if (s.phase === 'showdown' && p.phase !== 'showdown' && s.winners.length) {
+      const potBB = s.winners.reduce((a, w) => a + w.amount, 0) / bb;
       if (s.winners.some((w) => w.id === myId)) {
-        sfx.win();
+        sfx.win(potBB);
         vibrate([60, 40, 60, 40, 160]);
         setTimeout(() => chipBurst(document.querySelector('.pk-seat.me .pk-av'), { count: 14 }), 1000);
-      } else if (me?.inHand) sfx.lose();
-      else sfx.pot();
+      } else {
+        if (me?.inHand && !me.folded) sfx.lose();
+        sfx.pot(potBB, seatPan(s.winners[0].id));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s]);
+
+  // הפעולה שלי: צליל מיידי ברגע הלחיצה (לא מחכים לשרת), ואז שולחים
+  const doAct = (move: { type: string; to?: number }) => {
+    myPress.current = Date.now();
+    const bb = Math.max(1, s.settings.bb);
+    if (move.type === 'check') sfx.check();
+    else if (move.type === 'fold') sfx.fold(0, true);
+    else if (move.type === 'allin') sfx.allIn();
+    else if (move.type === 'call') sfx.bet((me?.bet ?? 0) + toCall, bb);
+    else if (move.type === 'raise') sfx.bet(move.to ?? 0, bb);
+    return act(move).catch((e) => {
+      myPress.current = 0;
+      throw e;
+    });
+  };
 
   useEffect(() => {
     prevBoard.current = { hand: s.handNo, len: s.board.length };
@@ -411,7 +458,7 @@ export function HoldemView({
                   <button className="pk-btn ghost" onClick={() => setRaiseOpen(false)}>
                     {tr('ביטול', 'Cancel')}
                   </button>
-                  <AsyncButton className="pk-btn gold" onClick={() => act(raiseTo >= stackTo ? { type: 'allin' } : { type: 'raise', to: Math.min(raiseTo, maxTo) })}>
+                  <AsyncButton className="pk-btn gold" onClick={() => doAct(raiseTo >= stackTo ? { type: 'allin' } : { type: 'raise', to: Math.min(raiseTo, maxTo) })}>
                     {raiseTo >= stackTo
                       ? tr('אול-אין', 'All-in')
                       : s.currentBet > 0
@@ -422,22 +469,22 @@ export function HoldemView({
               </div>
             ) : (
               <div className="pk-btnrow three">
-                <AsyncButton className="pk-btn fold" onClick={() => act({ type: 'fold' })}>
+                <AsyncButton className="pk-btn fold" onClick={() => doAct({ type: 'fold' })}>
                   {theme.labels.fold}
                 </AsyncButton>
                 {toCall === 0 ? (
-                  <AsyncButton className="pk-btn call" onClick={() => act({ type: 'check' })}>
+                  <AsyncButton className="pk-btn call" onClick={() => doAct({ type: 'check' })}>
                     {theme.labels.check}
                   </AsyncButton>
                 ) : (
-                  <AsyncButton className="pk-btn call" onClick={() => act(toCall >= me.chips ? { type: 'allin' } : { type: 'call' })}>
+                  <AsyncButton className="pk-btn call" onClick={() => doAct(toCall >= me.chips ? { type: 'allin' } : { type: 'call' })}>
                     <span>{toCall >= me.chips ? theme.labels.allin : theme.labels.call}</span>
                     <small>{fmt(Math.min(toCall, me.chips))}</small>
                   </AsyncButton>
                 )}
                 {canRaise ? (
                   minTo >= maxTo ? (
-                    <AsyncButton className="pk-btn raise" onClick={() => act({ type: 'allin' })}>
+                    <AsyncButton className="pk-btn raise" onClick={() => doAct({ type: 'allin' })}>
                       {theme.labels.allin}
                     </AsyncButton>
                   ) : (

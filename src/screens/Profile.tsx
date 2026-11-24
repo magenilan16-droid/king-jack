@@ -1,12 +1,12 @@
 // מסך פרופיל והגדרות
-import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, Volume2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase, type Profile as P } from '../lib/supabase';
 import { allThemes, type Theme, type ThemeId } from '../lib/themes';
 import { AvatarPicker, ThemePicker } from '../components/Pickers';
 import { isIOS, isStandalone } from '../lib/platform';
 import { usePushSetup, sendTestPush } from '../components/PushSetup';
 import { forgetPushOnThisDevice } from '../lib/push';
-import { useMuted } from '../lib/sound';
+import { SoundSettings } from '../components/SoundSettings';
 import { useI18n } from '../lib/i18n';
 import { Avatar } from '../components/Avatar';
 import { AsyncButton } from '../components/ui';
@@ -32,7 +32,6 @@ export function ProfileScreen({
 }) {
   const { tr, lang, setLang } = useI18n();
   const push = usePushSetup(onInstall);
-  const [muted, setMuted] = useMuted();
   const Chev = lang === 'he' ? ChevronLeft : ChevronRight;
 
   return (
@@ -87,12 +86,7 @@ export function ProfileScreen({
             </span>
             <input type="checkbox" role="switch" checked={tipsOn} onChange={(e) => setTipsOn(e.target.checked)} />
           </label>
-          <label className="menu-item toggle">
-            <span className="mi">
-              <Volume2 size={19} /> {tr('צלילים', 'Sounds')}
-            </span>
-            <input type="checkbox" role="switch" checked={!muted} onChange={(e) => setMuted(!e.target.checked)} />
-          </label>
+          <SoundSettings />
         </div>
 
         <div className="list-label">{tr('טלפון', 'Phone')}</div>

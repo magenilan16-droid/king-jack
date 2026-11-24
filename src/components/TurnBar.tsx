@@ -46,7 +46,7 @@ export function TurnBar({
     }
     if (mine && secs <= 5 && secs > 0 && lastTick.current !== secs) {
       lastTick.current = secs;
-      sfx.tick();
+      sfx.tick(secs <= 3);
     }
   }, [now, deadline, roomId, mine, secs, expireMove]);
   if (!deadline) return null;

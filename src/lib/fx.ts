@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
-import { sfx } from './sound';
+import { sfx, seatPan } from './sound';
 import { vibrate } from './prefs';
 
 export type FxEvent =
@@ -30,15 +30,15 @@ export function useRoomFx(roomId: string, myId: string) {
       setEvents((old) => [...old.slice(-15), e]);
       setTimeout(() => setEvents((old) => old.filter((x) => x.id !== e.id)), 2800);
       if (e.kind === 'throw') {
-        sfx.whoosh();
-        setTimeout(() => sfx.splat(e.item), 650);
+        sfx.whoosh(seatPan(e.from), seatPan(e.to));
+        setTimeout(() => sfx.splat(e.item, seatPan(e.to)), 650);
         if (e.to === myId) setTimeout(() => vibrate(60), 650);
-      } else if (e.kind === 'emote') sfx.pop();
+      } else if (e.kind === 'emote') sfx.pop(seatPan(e.from));
       else if (e.kind === 'nudge' && e.to === myId) {
         sfx.nudge();
         vibrate([80, 60, 80, 60, 80]);
       } else if (e.kind === 'showme') {
-        sfx.pop();
+        sfx.pop(seatPan(e.from));
         if (e.to === myId) vibrate([40, 30, 40]);
       }
     },

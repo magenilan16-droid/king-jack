@@ -15,7 +15,7 @@ import { pick } from '../lib/themes';
 import { fmt, signed } from '../lib/balances';
 import { useI18n, type Lang } from '../lib/i18n';
 import { displayName } from '../lib/display';
-import { sfx } from '../lib/sound';
+import { sfx, seatPan } from '../lib/sound';
 import { vibrate } from '../lib/prefs';
 import { useTween, flyChips, chipBurst } from '../lib/motion';
 import { Crown } from 'lucide-react';
@@ -123,8 +123,16 @@ export function BlackjackView({
       const n = Math.min(14, count(s));
       for (let k = 0; k < n; k++) setTimeout(() => sfx.card(), 380 + k * 110);
     } else if (count(s) > count(p)) sfx.card();
-    const readyNow = s.players.filter((x) => x.ready).length;
-    if (s.phase === 'betting' && readyNow > p.players.filter((x) => x.ready).length) sfx.chips();
+    if (s.phase === 'betting') {
+      let k = 0;
+      for (const pl of s.players) {
+        const was = p.players.find((x) => x.id === pl.id);
+        if (!pl.ready || was?.ready || pl.id === myId) continue;
+        const id = pl.id;
+        const amt = pl.bet;
+        setTimeout(() => sfx.bet(amt, s.settings.minBet, seatPan(id)), k++ * 180);
+      }
+    }
     if (s.phase === 'results' && p.phase !== 'results') {
       // הדילר משלם למנצחים ואוסף מהמפסידים
       const rack = document.querySelector('.bk-rack');
@@ -351,7 +359,11 @@ export function BlackjackView({
                       </span>
                     </button>
                   ) : (
-                    <AsyncButton className="pk-btn gold" onClick={() => act({ type: 'bet', amount: bet })} disabled={bet < min || bet > maxBet}>
+                    <AsyncButton className="pk-btn gold" onClick={() => {
+                      // הז׳טונים שלי נשמעים מיד בלחיצה
+                      sfx.bet(bet, min);
+                      return act({ type: 'bet', amount: bet });
+                    }} disabled={bet < min || bet > maxBet}>
                       {bet < min ? (
                         tr(`מינימום ${fmt(min)}`, `Minimum ${fmt(min)}`)
                       ) : (
