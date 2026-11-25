@@ -16,6 +16,7 @@ import { Avatar } from './components/Avatar';
 import { Admin } from './screens/Admin';
 import { ProfileScreen } from './screens/Profile';
 import { BottomNav, type Tab } from './components/BottomNav';
+import { WhatsNew } from './components/WhatsNew';
 
 type Route = { name: 'lobby' } | { name: 'table'; roomId: string } | { name: 'stats' } | { name: 'install' } | { name: 'debts' } | { name: 'admin' } | { name: 'profile' };
 
@@ -242,6 +243,7 @@ export default function App() {
     <>
       {screen}
       {showNav && <BottomNav tab={route.name as Tab} onTab={(t) => setRoute({ name: t } as Route)} debtBadge={debtCount} />}
+      {showNav && !invite && <WhatsNew onPhoto={() => setRoute({ name: 'profile' })} />}
       <Sheet open={!!invite} onClose={() => invite && (markSeen(invite.id), setInvite(null))} title={tr('הזמנה למשחק', 'Game invite')}>
         {invite && (
           <div className="invite-pop">

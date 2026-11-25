@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { ChevronDown, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useI18n, type Lang } from '../lib/i18n';
-import { actionLabel, displayName, handName } from '../lib/display';
+import { actionLabel, avatarEmoji, displayName, handName } from '../lib/display';
 import { fmt, signed } from '../lib/balances';
 import { Hand } from './Card';
 import type { HoldemHandRecord } from '../engine/holdem';
@@ -107,7 +107,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
         <div className="hh-shown">
           {[...rec.players.filter((p) => winners.some((w) => w.id === p.id)), ...losers].map((p) => (
             <div key={p.id} className={`hh-player ${winners.some((w) => w.id === p.id) ? 'winner' : ''}`}>
-              <span className="avatar">{p.avatar}</span>
+              <span className="avatar">{avatarEmoji(p.avatar)}</span>
               <span className="grow" dir="auto">
                 {displayName(p, lang)}
                 <span className="sub"> {handName(p.cat, lang)}</span>
@@ -126,7 +126,7 @@ function HoldemCard({ rec, at, myId }: { rec: HoldemHandRecord; at: string; myId
             .filter((p) => p.shown)
             .map((p) => (
               <div key={p.id} className="hh-player">
-                <span className="avatar">{p.avatar}</span>
+                <span className="avatar">{avatarEmoji(p.avatar)}</span>
                 <span className="grow">{tr(`${displayName(p, lang)} הראה/תה`, `${displayName(p, lang)} showed`)}</span>
                 <Hand cards={p.shown!} size="sm" />
               </div>
@@ -189,7 +189,7 @@ function BlackjackCard({ rec, at, myId }: { rec: BlackjackHandRecord; at: string
       <div className="hh-shown">
         {rec.players.map((p) => (
           <div key={p.id} className={`hh-player ${p.net > 0 ? 'winner' : ''}`}>
-            <span className="avatar">{p.avatar}</span>
+            <span className="avatar">{avatarEmoji(p.avatar)}</span>
             <span className="grow" dir="auto">
               {displayName(p, lang)}
               <span className="sub"> {p.hands.map((h) => (lang === 'he' ? resultHe : resultEn)[h.result ?? ''] ?? '').join(' / ')}</span>

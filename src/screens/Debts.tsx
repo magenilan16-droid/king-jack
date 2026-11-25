@@ -5,6 +5,7 @@ import { supabase, gameCall, type Profile } from '../lib/supabase';
 import { settle } from '../engine/settle';
 import { fmt } from '../lib/balances';
 import { useI18n } from '../lib/i18n';
+import { avatarEmoji } from '../lib/display';
 import { AsyncButton, toast } from '../components/ui';
 
 interface DebtRow {
@@ -53,7 +54,7 @@ export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
   }, [load]);
 
   const who = (id: string | null) => (id ? (people[id]?.name ?? '?') : tr('הקופה', 'The Kitty'));
-  const whoText = (id: string | null) => (id ? (people[id] ? `${people[id].avatar} ${people[id].name}` : '?') : tr('הקופה', 'The Kitty'));
+  const whoText = (id: string | null) => (id ? (people[id] ? `${avatarEmoji(people[id].avatar)} ${people[id].name}`.trim() : '?') : tr('הקופה', 'The Kitty'));
   const dateFmt = (iso?: string) =>
     iso ? new Date(iso).toLocaleDateString(lang === 'he' ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'short' }) : '';
   const Arrow = lang === 'he' ? ArrowLeft : ArrowRight;

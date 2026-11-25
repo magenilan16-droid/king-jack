@@ -1,5 +1,6 @@
 // מסך פרופיל והגדרות
-import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, ChevronLeft, ChevronRight, Camera, X } from 'lucide-react';
 import { supabase, type Profile as P } from '../lib/supabase';
 import { allThemes, type Theme, type ThemeId } from '../lib/themes';
 import { AvatarPicker, ThemePicker } from '../components/Pickers';
@@ -9,7 +10,10 @@ import { forgetPushOnThisDevice } from '../lib/push';
 import { SoundSettings } from '../components/SoundSettings';
 import { useI18n } from '../lib/i18n';
 import { Avatar } from '../components/Avatar';
-import { AsyncButton } from '../components/ui';
+import { AsyncButton, toast } from '../components/ui';
+import { Achievements } from '../components/Achievements';
+import { isPhoto, uploadPhoto } from '../lib/photo';
+import { AVATARS } from '../lib/themes';
 
 export function ProfileScreen({
   profile,
@@ -33,6 +37,26 @@ export function ProfileScreen({
   const { tr, lang, setLang } = useI18n();
   const push = usePushSetup(onInstall);
   const Chev = lang === 'he' ? ChevronLeft : ChevronRight;
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const hasPhoto = isPhoto(profile.avatar);
+  const setAvatar = async (a: string) => {
+    await supabase.rpc('game_update_profile', { p_name: profile.name, p_avatar: a });
+    onProfileChange();
+  };
+  const onPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      await setAvatar(await uploadPhoto(profile.id, file));
+      toast(tr('התמונה עודכנה. החברים יראו אותה בשולחן.', 'Photo updated. Friends will see it at the table.'), 'win');
+    } catch {
+      toast(tr('לא הצלחנו להעלות את התמונה. נסו תמונה אחרת.', "Couldn't upload the photo. Try a different one."), 'error');
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
 
   return (
     <div className="screen has-nav">
@@ -54,14 +78,25 @@ export function ProfileScreen({
 
         <div className="list-label">{tr('הדמות שלי', 'My avatar')}</div>
         <div className="card-group">
-          <AvatarPicker
-            name={profile.name}
-            value={profile.avatar}
-            onChange={async (a) => {
-              await supabase.rpc('game_update_profile', { p_name: profile.name, p_avatar: a });
-              onProfileChange();
-            }}
-          />
+          <AvatarPicker name={profile.name} value={profile.avatar} onChange={setAvatar} />
+          <div className="photo-row">
+            <button className="btn primary" disabled={uploading} onClick={() => fileRef.current?.click()}>
+              {uploading ? <span className="spinner" /> : <Camera size={18} />}
+              {hasPhoto ? tr('החלפת התמונה', 'Change photo') : tr('תמונה שלי', 'Use my photo')}
+            </button>
+            {hasPhoto && (
+              <button className="btn ghost" disabled={uploading} onClick={() => setAvatar(AVATARS[0])}>
+                <X size={17} /> {tr('הסרה', 'Remove')}
+              </button>
+            )}
+            <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
+          </div>
+          <p className="hint photo-hint">{tr('צילום או תמונה מהגלריה. החברים יראו אותה במקום הדמות.', 'Take a picture or pick one from the gallery. Friends see it instead of the emoji.')}</p>
+        </div>
+
+        <div className="list-label">{tr('ההישגים שלי', 'My achievements')}</div>
+        <div className="card-group">
+          <Achievements userId={profile.id} />
         </div>
 
         <div className="list-label">{tr('שפה ומראה', 'Language & look')}</div>

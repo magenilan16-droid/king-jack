@@ -5,13 +5,20 @@ import type { Theme } from '../lib/themes';
 import { gameCall } from '../lib/supabase';
 import { Sheet, toast } from './ui';
 import { useI18n } from '../lib/i18n';
+import { chatName, chatText } from '../lib/display';
 
-export function useChatNotifier(chat: ChatMsg[] | undefined, myId: string, open: boolean) {
+// onFx: הודעה של בוט שמגיעה עם אימוג׳י / זריקה
+export function useChatNotifier(chat: ChatMsg[] | undefined, myId: string, open: boolean, onFx?: (m: ChatMsg) => void) {
   const [unread, setUnread] = useState(0);
   const [bubble, setBubble] = useState<ChatMsg | null>(null);
   // null = עוד לא נטען השולחן. בטעינה הראשונה מדלגים על ההיסטוריה (גם כשהיא ריקה)
   const last = useRef<number | null>(null);
   const hideT = useRef<number | undefined>(undefined);
+  const showT = useRef<number | undefined>(undefined);
+  const onFxRef = useRef(onFx);
+  useEffect(() => {
+    onFxRef.current = onFx;
+  });
   useEffect(() => {
     if (!chat) return;
     const newestAt = chat.length ? chat[chat.length - 1].at : 0;
@@ -26,11 +33,24 @@ export function useChatNotifier(chat: ChatMsg[] | undefined, myId: string, open:
     // מונה הודעות שלא נקראו - רק של אחרים. הבועה בשולחן - לכולם, גם להודעה שלי
     const others = fresh.filter((m) => m.id !== myId).length;
     if (!open && others) setUnread((u) => u + others);
-    setBubble(fresh[fresh.length - 1]);
-    window.clearTimeout(hideT.current);
-    hideT.current = window.setTimeout(() => setBubble(null), 4000);
+    // הודעה של בוט יכולה לחכות (למשל עד שהלוח של אול-אין נחשף) - הבועה והאפקט מגיעים בזמן שלה
+    const m = fresh[fresh.length - 1];
+    const wait = Math.min(12000, Math.max(0, m.delay ?? 0));
+    window.clearTimeout(showT.current);
+    showT.current = window.setTimeout(() => {
+      setBubble(m);
+      if (m.fx) onFxRef.current?.(m);
+      window.clearTimeout(hideT.current);
+      hideT.current = window.setTimeout(() => setBubble(null), 4000);
+    }, wait);
   }, [chat, myId, open]);
-  useEffect(() => () => window.clearTimeout(hideT.current), []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(hideT.current);
+      window.clearTimeout(showT.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (open) setUnread(0);
   }, [open]);
@@ -52,7 +72,7 @@ export function ChatSheet({
   theme: Theme;
   myId: string;
 }) {
-  const { tr } = useI18n();
+  const { tr, lang } = useI18n();
   const [text, setText] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -73,8 +93,8 @@ export function ChatSheet({
         {chat.length === 0 && <div className="empty">{tr('עוד אין הודעות. אפשר להתחיל לעקוץ.', 'No messages yet. Start the trash talk.')}</div>}
         {chat.map((m, i) => (
           <div key={i} className={`chat-msg ${m.id === myId ? 'mine' : ''}`}>
-            {m.id !== myId && <b>{m.name}</b>}
-            <span>{m.text}</span>
+            {m.id !== myId && <b dir="auto">{chatName(m, lang)}</b>}
+            <span dir="auto">{chatText(m, lang)}</span>
           </div>
         ))}
       </div>

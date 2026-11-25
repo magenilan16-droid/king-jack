@@ -1592,3 +1592,200 @@ a {
 .pk-hole.four {
   bottom: calc(15% + 10px);
 }
+
+/* ---------- אול-אין כמו בטלוויזיה: אחוז ניצחון מתחת לכל שחקן ---------- */
+.pk-eq {
+  position: absolute;
+  top: calc(100% + 3px);
+  z-index: 6;
+  min-width: 46px;
+  padding: 1px 9px;
+  border-radius: 999px;
+  font-family: var(--num);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--ivory);
+  background: rgba(6, 13, 10, 0.92);
+  box-shadow: 0 0 0 1px rgba(243, 237, 224, 0.2), 0 3px 8px rgba(0, 0, 0, 0.5);
+  animation: fade 0.3s;
+  transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+}
+.pk-eq.lead {
+  color: #1d1408;
+  background: var(--brass-hi);
+  box-shadow: 0 0 0 1px var(--brass), 0 0 16px rgba(232, 201, 122, 0.55);
+}
+.pk-eq.dead {
+  color: rgba(243, 237, 224, 0.42);
+  text-decoration: line-through;
+}
+.pk-variant.allin {
+  color: #ffb3a6;
+}
+/* הקלף האחרון עוד לא יצא: המקום שלו מהבהב בפליז */
+.pk-board.suspense .pk-slot:last-child {
+  border-color: var(--brass);
+  animation: kjSuspense 0.85s ease-in-out infinite alternate;
+}
+@keyframes kjSuspense {
+  from {
+    box-shadow: 0 0 0 1px rgba(201, 162, 74, 0.45), 0 0 6px rgba(232, 201, 122, 0.15);
+  }
+  to {
+    box-shadow: 0 0 0 1px var(--brass-hi), 0 0 24px rgba(232, 201, 122, 0.7);
+  }
+}
+
+/* ---------- "מה היה יוצא?" ---------- */
+.pk-rabbit {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(201, 162, 74, 0.55);
+  background: rgba(4, 14, 10, 0.72);
+  color: var(--brass-hi);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  animation: fade 0.3s 0.6s both;
+}
+.pk-rabbit:focus-visible {
+  outline: 2px solid var(--brass-hi);
+  outline-offset: 2px;
+}
+.card.pk-ghost {
+  opacity: 0.66;
+  filter: saturate(0.55);
+  outline: 1px dashed rgba(243, 237, 224, 0.55);
+  outline-offset: 2px;
+}
+.pk-rabbit-note {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--ivory);
+  background: rgba(4, 14, 10, 0.78);
+  animation: fade 0.3s 0.9s both;
+}
+.pk-rabbit-note b {
+  color: var(--brass-hi);
+}
+
+/* ---------- רגע גדול: חגיגה על כל המסך ---------- */
+.kj-moment {
+  position: fixed;
+  inset: 0;
+  z-index: 180;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(60% 45% at 50% 45%, rgba(8, 46, 33, 0.5), rgba(2, 8, 6, 0.84));
+  cursor: pointer;
+  animation: kmIn 0.35s ease-out both;
+}
+.km-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+  max-width: 92vw;
+  padding: 22px 28px 18px;
+  border-radius: 22px;
+  overflow: hidden;
+  text-align: center;
+  background: linear-gradient(180deg, #124030, #0a2118);
+  box-shadow:
+    0 0 0 1.5px var(--brass),
+    0 0 0 6px rgba(59, 36, 22, 0.92),
+    0 0 0 7.5px rgba(201, 162, 74, 0.5),
+    0 30px 60px rgba(0, 0, 0, 0.6);
+  animation: kmPop 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.km-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, rgba(255, 240, 200, 0.2) 50%, transparent 65%);
+  background-size: 260% 100%;
+  animation: kmSheen 1.5s 0.45s ease-out both;
+}
+.km-who {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(243, 237, 224, 0.7);
+}
+.km-title {
+  margin: 0;
+  font-family: var(--num);
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--brass-hi);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.45), 0 0 26px rgba(232, 201, 122, 0.45);
+}
+.km-cards {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  direction: ltr;
+}
+.km-cards .card.md {
+  width: 46px;
+  height: 64px;
+}
+.km-amt {
+  font-family: var(--num);
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1.05;
+  color: #8ff0b6;
+}
+.km-badge {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(243, 237, 224, 0.55);
+}
+@keyframes kmIn {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes kmPop {
+  from {
+    transform: scale(0.6) translateY(24px);
+    opacity: 0;
+  }
+}
+@keyframes kmSheen {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kj-moment,
+  .km-card,
+  .km-card::before,
+  .pk-board.suspense .pk-slot:last-child,
+  .pk-rabbit,
+  .pk-rabbit-note {
+    animation: none;
+  }
+}
+/* מושב למעלה: הקלפים שנחשפו יושבים מתחת לשם - האחוז יורד מתחת לקלפים */
+.pk-seat.top .pk-eq {
+  top: calc(100% + 47px);
+}

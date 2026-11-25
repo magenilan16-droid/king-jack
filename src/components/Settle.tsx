@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight, MessageCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { computeLines, fmt, signed, KUPA_ID } from '../lib/balances';
 import { useI18n } from '../lib/i18n';
+import { avatarEmoji } from '../lib/display';
 import { Avatar } from './Avatar';
 import type { LedgerRow, RoomRow } from '../lib/useRoom';
 
@@ -33,7 +34,7 @@ export function Settle({ room, ledger, moneyMode }: { room: RoomRow; ledger: Led
     const head = `King Jack - ${room.name}: ${live ? tr('מצב נוכחי', 'current standings') : tr('סיכום ערב', 'night summary')}${
       moneyMode === 'demo' ? tr(' (אימון)', ' (practice)') : ''
     }`;
-    const rows = lines.map((l) => `${l.avatar} ${l.name}: ${signed(l.net)}`);
+    const rows = lines.map((l) => `${avatarEmoji(l.avatar)} ${l.name}: ${signed(l.net)}`.trim());
     const tr2 = transfers.map((t) =>
       lang === 'he' ? `${t.fromName} מעביר/ה ל${t.toName} ${fmt(t.amount)}₪` : `${t.fromName} pays ${t.toName} ₪${fmt(t.amount)}`,
     );
@@ -59,7 +60,7 @@ export function Settle({ room, ledger, moneyMode }: { room: RoomRow; ledger: Led
               <tr key={l.id}>
                 <td>
                   <span className="ledger-name" dir="auto">
-                    <Avatar name={l.name} size={24} /> {l.name}
+                    <Avatar name={l.name} emoji={l.avatar} size={24} /> {l.name}
                   </span>
                 </td>
                 <td>{fmt(l.buyin)}</td>

@@ -62,5 +62,10 @@ export function useRoomFx(roomId: string, myId: string) {
     [myId],
   );
 
-  return { events, send };
+  // אפקט מקומי בלבד (לא נשלח לאחרים) - למשל אימוג׳י של בוט שהגיע עם הודעה, שכל טלפון מציג בעצמו
+  const inject = useCallback((e: { kind: 'emote'; from: string; emoji: string } | { kind: 'throw'; from: string; to: string; item: string }) => {
+    add({ ...e, id: Math.random().toString(36).slice(2) } as FxEvent);
+  }, [add]);
+
+  return { events, send, inject };
 }

@@ -1,7 +1,7 @@
 // שולחן טקסס הולדם / אומהה - מסך מלא, השחקנים סביב שולחן אובלי ואני למטה
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Sparkles, Crown, Eye } from 'lucide-react';
-import { type HState, type HPlayer, potSize, computePots, isOmaha, potLimitTo } from '../engine/holdem';
+import { type HState, type HPlayer, potSize, computePots, isOmaha, potLimitTo, runoutStages, runoutTimes, runoutMs } from '../engine/holdem';
 import type { Card as C } from '../engine/cards';
 import { turnMs, MAX_STRIKES } from '../engine/common';
 import { canRebuyNow } from '../engine/room';
@@ -22,6 +22,8 @@ import { sfx, seatPan } from '../lib/sound';
 import { vibrate } from '../lib/prefs';
 import { useTween, chipBurst } from '../lib/motion';
 import { useBotKick } from '../lib/useBotKick';
+import { holdemAch, ACH_ORDER } from '../lib/achievements';
+import { BigMoment, type Moment } from '../components/BigMoment';
 
 type Act = (move: Record<string, unknown>) => Promise<void>;
 
@@ -104,6 +106,74 @@ export function HoldemView({
   const boardDelay = useRef(new Map<string, number>());
   const total = turnMs(s.settings);
   const unit = Math.max(1, s.settings.sb);
+  const showdown = s.phase === 'showdown';
+  const running = s.phase !== 'waiting' && !showdown;
+
+  // אול-אין "כמו בטלוויזיה": כל הקלפים פתוחים, הלוח נחשף רחוב אחרי רחוב, ולכל שחקן - אחוז הניצחון שלו.
+  // רק מי שראה את היד רצה מקבל את ההצגה (מי שנכנס באמצע רואה ישר את התוצאה)
+  const [liveHand, setLiveHand] = useState<number | null>(null);
+  useEffect(() => {
+    if (running) setLiveHand(s.handNo);
+  }, [running, s.handNo]);
+  const ro = showdown && s.runout && s.runout.hand === s.handNo && liveHand === s.handNo ? s.runout : null;
+  const roStages = ro ? runoutStages(ro.from) : [];
+  const [roStep, setRoStep] = useState<{ hand: number; k: number } | null>(null);
+  const roK = ro ? (roStep?.hand === s.handNo ? roStep.k : 0) : null;
+  const revealing = roK != null && roK < roStages.length;
+  const board = revealing ? s.board.slice(0, roStages[roK]) : s.board;
+  // התוצאה (מי ניצח, הז׳טונים עפים) - רק אחרי שהלוח נחשף עד הסוף
+  const showResult = showdown && !revealing;
+  useEffect(() => {
+    if (!ro) return;
+    const hand = s.handNo;
+    const ts = runoutTimes(ro.from)
+      .slice(1)
+      .map((t, i) => setTimeout(() => setRoStep({ hand, k: i + 1 }), t));
+    return () => ts.forEach(clearTimeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ro?.hand, s.handNo]);
+  // כל רחוב שנחשף בהצגה - הקלפים נוחתים עם צליל
+  const roPrevK = useRef<number | null>(null);
+  useEffect(() => {
+    const prevK = roPrevK.current;
+    roPrevK.current = roK;
+    if (roK == null || prevK == null || roK <= prevK || roK >= roStages.length) return;
+    const from = roStages[prevK];
+    const to = roStages[roK];
+    for (let i = from; i < to; i++) setTimeout(() => sfx.card('place'), (i - from) * 160 + (to === 5 ? 650 : 200));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roK]);
+  const eqOf = (id: string) => (revealing && ro ? ro.eq[id]?.[roK!] : undefined);
+  const eqLead = revealing && ro ? Math.max(...Object.values(ro.eq).map((e) => e[roK!] ?? 0)) : -1;
+
+  // "מה היה יוצא?" - אחרי שכולם קיפלו, כל אחד יכול להציץ (רק אצלו) בקלפים שהיו יוצאים
+  const rabbit = showResult && s.rabbit && s.rabbit.hand === s.handNo && (s.winners[0]?.cat ?? 0) < 0 ? s.rabbit.cards : null;
+  const [rabbitHand, setRabbitHand] = useState<number | null>(null);
+  const rabbitOn = !!rabbit && rabbitHand === s.handNo;
+  const rabbitMade = rabbitOn && hole.length >= 2 && me?.inHand ? handName(bestFor(hole, [...s.board, ...rabbit!]).cat, lang) : null;
+
+  // רגע גדול (רביעייה, 7-2 מנצח, קופת ענק...) - חגיגה על כל המסך לכל השולחן
+  const [moment, setMoment] = useState<Moment | null>(null);
+  const seenMoments = useRef(new Set<string>());
+  useEffect(() => {
+    const rec = s.lastHand;
+    if (!showResult || !rec || rec.no !== s.handNo || liveHand !== s.handNo) return;
+    for (const w of rec.winners) {
+      const achs = holdemAch(rec, w.id);
+      const top = ACH_ORDER.find((a) => achs.includes(a));
+      if (!top) continue;
+      const key = `${rec.no}:${w.id}:${top}`;
+      if (seenMoments.current.has(key)) continue;
+      seenMoments.current.add(key);
+      const pl = rec.players.find((x) => x.id === w.id);
+      const cards = top === 'seventwo' || top === 'bluff' ? (pl?.shown ?? undefined) : top === 'monster' ? undefined : w.best;
+      const m: Moment = { key, ach: top, name: pl ? displayName(pl, lang) : w.name, mine: w.id === myId, cards, amount: top === 'monster' ? w.amount : undefined };
+      // קודם הקופה עפה למנצח, ואז החגיגה
+      setTimeout(() => setMoment(m), top === 'bluff' ? 500 : 1300);
+      break;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showResult, s.lastHand, s.handNo, liveHand]);
 
   // סדר המושבים: אני למטה, ואחריי בכיוון השעון
   const myIdx = s.players.findIndex((p) => p.id === myId);
@@ -116,19 +186,18 @@ export function HoldemView({
   // קלפים חדשים על הלוח: מאיזה אינדקס התחילו (כדי לפזר רק אותם בזמן)
   const boardFrom = prevBoard.current.hand === s.handNo ? prevBoard.current.len : 0;
   const delayFor = (i: number) => {
-    const k = `${s.handNo}-${i}-${s.board[i]}`;
+    const k = `${s.handNo}-${i}-${board[i]}`;
     const m = boardDelay.current;
     if (!m.has(k)) {
       if (m.size > 40) m.clear();
-      m.set(k, Math.max(0, i - boardFrom) * 160 + (i >= 3 && boardFrom < 3 ? 250 : 0));
+      // בהצגת אול-אין הריבר נחשף לאט יותר (רגע של מתח)
+      m.set(k, Math.max(0, i - boardFrom) * 160 + (i >= 3 && boardFrom < 3 ? 250 : 0) + (ro && i === 4 ? 450 : 0));
     }
     return m.get(k)!;
   };
   const winnerIds = new Set(s.winners.map((w) => w.id));
   const winAmount = new Map(s.winners.map((w) => [w.id, w.amount]));
   const dealerId = s.players[s.dealerIdx]?.id;
-  const showdown = s.phase === 'showdown';
-  const running = s.phase !== 'waiting' && !showdown;
   // תור של בוט: השרת מזיז אותו אחרי זמן המחשבה, והטלפון רק מגבה אם זה נתקע
   useBotKick(roomId, running && s.turnId?.startsWith('bot-') ? `${s.handNo}:${s.handLog?.length ?? 0}:${s.turnId}` : null, !!me, isHost);
 
@@ -148,13 +217,16 @@ export function HoldemView({
     if (!p) return;
     const bb = Math.max(1, s.settings.bb);
     const newHand = s.handNo !== p.handNo;
+    // אול-אין שנחשף עכשיו: צלילי הלוח והזכייה מגיעים לפי ההצגה, לא מיד
+    const liveRo = !newHand && s.phase === 'showdown' && p.phase !== 'showdown' && s.runout?.hand === s.handNo ? s.runout : null;
+    const resultAt = liveRo ? runoutMs(liveRo.from) : 0;
     let after = 0; // ביד חדשה: הפעולות של הבוטים נשמעות רק אחרי החלוקה
     if (newHand) {
       sfx.shuffle();
       const cards = Math.min(omaha ? 16 : 14, s.players.filter((x) => x.inHand).length * nHole);
       for (let k = 0; k < cards; k++) setTimeout(() => sfx.card(), DEAL_BASE + k * step);
       after = DEAL_BASE + cards * step + 250;
-    } else if (s.board.length > p.board.length) {
+    } else if (s.board.length > p.board.length && !liveRo) {
       // קלפי הלוח: הצליל ברגע שהקלף נוחת (כמו העיכוב של האנימציה)
       for (let i = p.board.length; i < s.board.length; i++) {
         const d = (i - p.board.length) * 160 + (i >= 3 && p.board.length < 3 ? 250 : 0);
@@ -210,14 +282,19 @@ export function HoldemView({
     }
     if (s.phase === 'showdown' && p.phase !== 'showdown' && s.winners.length) {
       const potBB = s.winners.reduce((a, w) => a + w.amount, 0) / bb;
-      if (s.winners.some((w) => w.id === myId)) {
-        sfx.win(potBB);
-        vibrate([60, 40, 60, 40, 160]);
-        setTimeout(() => chipBurst(document.querySelector('.pk-seat.me .pk-av'), { count: 14 }), 1000);
-      } else {
-        if (me?.inHand && !me.folded) sfx.lose();
-        sfx.pot(potBB, seatPan(s.winners[0].id));
-      }
+      const iWon = s.winners.some((w) => w.id === myId);
+      const inIt = !!me?.inHand && !me.folded;
+      const wId = s.winners[0].id;
+      setTimeout(() => {
+        if (iWon) {
+          sfx.win(potBB);
+          vibrate([60, 40, 60, 40, 160]);
+          setTimeout(() => chipBurst(document.querySelector('.pk-seat.me .pk-av'), { count: 14 }), 1000);
+        } else {
+          if (inIt) sfx.lose();
+          sfx.pot(potBB, seatPan(wId));
+        }
+      }, resultAt);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s]);
@@ -238,7 +315,7 @@ export function HoldemView({
   };
 
   useEffect(() => {
-    prevBoard.current = { hand: s.handNo, len: s.board.length };
+    prevBoard.current = { hand: s.handNo, len: board.length };
   });
 
   useEffect(() => {
@@ -250,7 +327,8 @@ export function HoldemView({
   // המארח מתחיל את היד הבאה אוטומטית
   useEffect(() => {
     if (!me || !showdown) return;
-    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), isHost ? 6500 : 9500 + Math.random() * 1500);
+    const show = s.runout && s.runout.hand === s.handNo ? runoutMs(s.runout.from) : 0;
+    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), show + (isHost ? 6500 : 9500 + Math.random() * 1500));
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isHost, !!me, s.phase, s.handNo]);
@@ -262,7 +340,7 @@ export function HoldemView({
   const iAsked = !!req && req.to === foldWinner?.id && req.from.includes(myId);
   const askedMe = req && req.to === myId ? req.from.length : 0;
   const readyPlayers = s.players.filter((p) => p.chips > 0 && !p.sitOut).length;
-  const made = hole.length >= 2 && s.board.length >= 3 ? handName(bestFor(hole, s.board).cat, lang) : null;
+  const made = hole.length >= 2 && board.length >= 3 ? handName(bestFor(hole, board).cat, lang) : null;
   // העלאה בגודל הקופה = הקופה אחרי שמשווים, מעל ההימור הנוכחי
   const potAfterCall = pot + toCall;
   const potPresets = [
@@ -285,11 +363,13 @@ export function HoldemView({
 
         {/* מרכז: קופה, קלפים פתוחים, שלב ובליינדים */}
         <div className="pk-center">
-          <Pots s={s} pot={pot} unit={unit} lang={lang} />
-          <div className="pk-board">
+          <Pots s={s} pot={pot} unit={unit} lang={lang} result={showResult} />
+          <div className={`pk-board ${revealing && roStages[roK! + 1] === 5 ? 'suspense' : ''}`}>
             {Array.from({ length: 5 }).map((_, i) =>
-              s.board[i] ? (
-                <Card key={i + s.board[i]} card={s.board[i]} size="md" deal flip delay={delayFor(i)} />
+              board[i] ? (
+                <Card key={i + board[i]} card={board[i]} size="md" deal flip delay={delayFor(i)} className={ro && i === 4 ? 'kj-slow' : ''} />
+              ) : rabbitOn && rabbit![i - s.board.length] ? (
+                <Card key={'r' + rabbit![i - s.board.length]} card={rabbit![i - s.board.length]} size="md" flip delay={(i - s.board.length) * 200} className="pk-ghost" />
               ) : (
                 <span key={i} className="pk-slot" />
               ),
@@ -297,10 +377,34 @@ export function HoldemView({
           </div>
           <div className="pk-meta">
             {omaha && <span className="pk-variant">{tr('אומהה', 'Omaha')}</span>}
-            <span>{phaseLabel(s.phase, lang)}</span>
+            {revealing ? (
+              <>
+                <span className="pk-variant allin">{tr('אול-אין', 'All-in')}</span>
+                <span>{phaseLabel(['preflop', '', '', 'flop', 'turn', 'river'][board.length] || 'river', lang)}</span>
+              </>
+            ) : (
+              <span>{phaseLabel(s.phase, lang)}</span>
+            )}
             <BlindsClock s={s} />
           </div>
-          {showdown && s.winners.length > 0 && (
+          {rabbit && !rabbitOn && (
+            <button
+              className="pk-rabbit"
+              onClick={() => {
+                setRabbitHand(s.handNo);
+                vibrate(10);
+                rabbit.forEach((_, i) => setTimeout(() => sfx.card('place'), 220 + i * 200));
+              }}
+            >
+              <Eye size={15} /> {tr('מה היה יוצא?', 'What would have come?')}
+            </button>
+          )}
+          {rabbitMade && (
+            <span className="pk-rabbit-note">
+              {tr('היה לך', 'You would have had')} <b>{rabbitMade}</b>
+            </span>
+          )}
+          {showResult && s.winners.length > 0 && (
             <div className="pk-result">
               {s.winners.map((w) => {
                 const wp = s.players.find((p) => p.id === w.id);
@@ -332,7 +436,10 @@ export function HoldemView({
             isKing={kingId === p.id}
             handNo={s.handNo}
             waiting={s.phase === 'waiting'}
-            winAmount={winAmount.get(p.id)}
+            winAmount={showResult ? winAmount.get(p.id) : undefined}
+            hold={revealing ? (winAmount.get(p.id) ?? 0) : 0}
+            eq={eqOf(p.id)}
+            eqLead={eqOf(p.id) === eqLead}
             deadline={s.turnId === p.id ? s.turnDeadline : null}
             total={total}
             lang={lang}
@@ -365,7 +472,7 @@ export function HoldemView({
         ))}
 
         {/* הקופה עפה למנצח */}
-        {showdown &&
+        {showResult &&
           s.winners.map((w) => {
             const pos = posOf.get(w.id) ?? { x: 50, y: 86 };
             return Array.from({ length: 9 }).map((_, i) => (
@@ -379,7 +486,7 @@ export function HoldemView({
 
         {/* הקלפים שלי - גדולים, מעל המושב שלי */}
         {me && hole.length >= 2 && (
-          <div className={`pk-hole ${hole.length === 4 ? 'four' : ''} ${me.folded ? 'folded' : ''} ${winnerIds.has(myId) ? 'won' : ''}`} style={cq(0, CENTER.y - 88)}>
+          <div className={`pk-hole ${hole.length === 4 ? 'four' : ''} ${me.folded ? 'folded' : ''} ${showResult && winnerIds.has(myId) ? 'won' : ''}`} style={cq(0, CENTER.y - 88)}>
             {hole.map((c, i) => (
               <Card key={c + i} card={c} size="lg" deal flip delay={DEAL_BASE + i * nDealt * step} />
             ))}
@@ -398,7 +505,7 @@ export function HoldemView({
         {me && !me.sitOut && (me.strikes ?? 0) > 0 && (me.strikes ?? 0) < MAX_STRIKES && (
           <div className="pk-note warn">{tr('פספסת תור - עוד פעם אחת ותושב בצד', 'You missed a turn - one more and you sit out')}</div>
         )}
-        {me && canRebuyNow(s, myId) && (
+        {me && canRebuyNow(s, myId) && !revealing && (
           <button className="pk-btn gold block" onClick={onRebuy}>
             {tr(`קנייה חוזרת ב-${fmt(s.settings.buyIn)}`, `Rebuy for ${fmt(s.settings.buyIn)}`)}
           </button>
@@ -503,7 +610,7 @@ export function HoldemView({
           </>
         )}
 
-        {showdown && me && (
+        {showResult && me && (
           <div className="pk-btnrow">
             {hole.length >= 2 && !me.shown && (
               <AsyncButton className={`pk-btn ${askedMe ? 'gold kj-asked' : 'ghost'}`} onClick={() => act({ type: 'show' })}>
@@ -528,6 +635,7 @@ export function HoldemView({
           </div>
         )}
       </div>
+      {moment && <BigMoment m={moment} onDone={() => setMoment(null)} />}
     </div>
   );
 }
@@ -551,6 +659,9 @@ function Seat({
   step,
   isKing,
   handNo,
+  hold,
+  eq,
+  eqLead,
 }: {
   p: HPlayer;
   pos: { x: number; y: number };
@@ -569,9 +680,13 @@ function Seat({
   step: number;
   isKing: boolean;
   handNo: number;
+  hold: number; // בזמן הצגת אול-אין - הזכייה עוד לא נכנסה לערימה
+  eq?: number;
+  eqLead: boolean;
 }) {
   // מי שזכה: הערימה עולה רק כשהז׳טונים מהקופה מגיעים אליו
-  const chips = useTween(p.chips, 450, winAmount ? 1100 : 0);
+  const chips = useTween(p.chips - hold, 450, winAmount ? 1100 : 0);
+  const eqShown = useTween(eq ?? 0, 420);
   const out = p.folded || (!p.inHand && !waiting) || (waiting && (p.sitOut || p.chips <= 0));
   const kind = actionKind(p.lastAction);
   return (
@@ -617,6 +732,11 @@ function Seat({
         <span className={`pk-stack ${p.allIn ? 'allin' : ''}`}>{p.allIn ? (lang === 'he' ? 'אול-אין' : 'All-in') : fmt(chips)}</span>
       </span>
       {p.lastAction && !p.shown && !winAmount && <span className={`pk-act ${kind}`}>{actionLabel(p.lastAction, lang)}</span>}
+      {eq != null && (
+        <span className={`pk-eq ${eqLead && eq > 0 ? 'lead' : ''} ${eq === 0 ? 'dead' : ''}`} dir="ltr">
+          {Math.round(eqShown)}%
+        </span>
+      )}
       {winAmount ? (
         <span className="pk-win" dir="ltr">
           +{fmt(winAmount)}
@@ -627,14 +747,14 @@ function Seat({
 }
 
 // קופה ראשית + קופות צדדיות, ובסוף היד - מי לקח כל קופה
-function Pots({ s, pot, unit, lang }: { s: HState; pot: number; unit: number; lang: Lang }) {
+function Pots({ s, pot, unit, lang, result }: { s: HState; pot: number; unit: number; lang: Lang; result: boolean }) {
   const he = lang === 'he';
   const potShown = useTween(pot, 380);
   const nameOf = (id: string) => {
     const p = s.players.find((x) => x.id === id);
     return p ? displayName(p, lang) : '?';
   };
-  if (s.phase === 'showdown' && (s.potResults?.length ?? 0) > 1) {
+  if (s.phase === 'showdown' && result && (s.potResults?.length ?? 0) > 1) {
     return (
       <div className="pk-pots">
         {s.potResults!.map((r, i) => (
@@ -666,7 +786,7 @@ function Pots({ s, pot, unit, lang }: { s: HState; pot: number; unit: number; la
   if (pot <= 0) return <div className="pk-pots empty" />;
   return (
     <div className="pk-pots">
-      <span className={`pk-pot main ${s.phase === 'showdown' ? 'kj-pot-out' : ''}`}>
+      <span className={`pk-pot main ${s.phase === 'showdown' && result ? 'kj-pot-out' : ''}`}>
         <ChipStack amount={pot} unit={unit} size={16} label={false} />
         <b>{fmt(potShown)}</b>
       </span>

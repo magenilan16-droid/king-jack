@@ -3,6 +3,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { FxEvent } from '../lib/fx';
 import type { ChatMsg } from '../engine/room';
+import { chatText } from '../lib/display';
+import { getLang } from '../lib/i18n';
 
 function centerOf(pid: string): { x: number; y: number } | null {
   const el = document.querySelector(`[data-pid="${CSS.escape(pid)}"]`);
@@ -95,7 +97,7 @@ function ChatBubble({ msg }: { msg: ChatMsg }) {
   if (!pos) return null;
   return (
     <span className="fx-chat" style={{ left: Math.min(Math.max(pos.x, 90), window.innerWidth - 90), top: pos.y - 34 }} dir="auto">
-      {msg.text}
+      {chatText(msg, getLang())}
     </span>
   );
 }

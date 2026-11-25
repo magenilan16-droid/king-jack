@@ -1,4 +1,7 @@
-// עיגול שחקן: צבע קבוע לפי השם + אות ראשונה, והאימוג׳י שבחר כתג קטן
+// עיגול שחקן: צבע קבוע לפי השם + אות ראשונה, והאימוג׳י שבחר כתג קטן - או תמונת פרופיל אמיתית
+import { useState } from 'react';
+import { isPhoto, photoUrl } from '../lib/photo';
+
 const PALETTE = [
   ['#5b8cff', '#2b4bb8'],
   ['#ff7a59', '#c0391b'],
@@ -39,6 +42,14 @@ export function Avatar({
   className?: string;
 }) {
   const [c1, c2] = PALETTE[hash(name) % PALETTE.length];
+  const [broken, setBroken] = useState<string | null>(null);
+  const url = !bot && emoji && broken !== emoji ? photoUrl(emoji) : null;
+  if (url)
+    return (
+      <span className={`av-circle av-photo ${className}`} style={{ width: size, height: size }} aria-hidden="true">
+        <img src={url} alt="" width={size} height={size} loading="lazy" decoding="async" draggable={false} onError={() => setBroken(emoji!)} />
+      </span>
+    );
   return (
     <span
       className={`av-circle ${className}`}
@@ -46,7 +57,7 @@ export function Avatar({
       aria-hidden="true"
     >
       <span className="av-initials">{bot ? '🤖' : initials(name)}</span>
-      {emoji && !bot && (
+      {emoji && !bot && !isPhoto(emoji) && (
         <span className="av-badge" style={{ fontSize: Math.max(11, size * 0.3) }}>
           {emoji}
         </span>

@@ -1,6 +1,8 @@
 // תצוגה לפי שפה: שמות בוטים, פעולות אחרונות ושמות ידיים
 import { BOT_NAMES } from '../engine/common';
 import { HAND_NAMES, HAND_NAMES_EN } from '../engine/handEval';
+import { BOT_LINES, fillLine } from '../engine/botTalk';
+import type { ChatMsg } from '../engine/room';
 import type { Lang } from './i18n';
 
 const BOT_EN = ['Robo Rafi', 'Botty', 'Chippy', 'Dr. Card', 'Max', 'Lulu', 'Johnny', 'Bina'];
@@ -10,6 +12,21 @@ export function displayName(p: { name: string; isBot?: boolean }, lang: Lang): s
   const i = BOT_NAMES.indexOf(p.name);
   return i >= 0 ? BOT_EN[i] : p.name;
 }
+
+// טקסט הודעת צ׳אט בשפה שלי (שורות של בוטים מתורגמות)
+export function chatText(m: ChatMsg, lang: Lang): string {
+  if (!m.key) return m.text;
+  const [group, v] = m.key.split(':');
+  const line = BOT_LINES[group]?.[lang]?.[Number(v)];
+  return line ? fillLine(line, m.vars) : m.text;
+}
+
+export function chatName(m: ChatMsg, lang: Lang): string {
+  return displayName({ name: m.name, isBot: m.id.startsWith('bot-') }, lang);
+}
+
+// אימוג׳י של דמות להצגה בטקסט (תמונת פרופיל לא נכנסת לטקסט)
+export const avatarEmoji = (a?: string | null) => (a && !a.startsWith('img:') ? a : '');
 
 export function botNameByHebrew(name: string, lang: Lang): string {
   return displayName({ name, isBot: true }, lang);

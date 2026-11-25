@@ -476,7 +476,12 @@ Deno.serve(async (req) => {
       return await mutate(roomId, (full) => ({ effects: joinGame(full, me) }));
     }
     if (body.op === 'act') {
-      return await mutate(roomId, (full) => act(full, userId, body.move as RoomMove, now));
+      return await mutate(roomId, (full) => {
+        // מי שהחליף תמונה / דמות בזמן שהוא יושב - מתעדכן בשולחן במהלך הבא שלו
+        const seat = full.pub.players.find((p) => p.id === userId);
+        if (seat && profile.avatar && seat.avatar !== profile.avatar) seat.avatar = profile.avatar;
+        return act(full, userId, body.move as RoomMove, now);
+      });
     }
     return json({ error: 'פעולה לא מוכרת' }, 400);
   } catch (e) {

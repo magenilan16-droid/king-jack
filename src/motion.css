@@ -491,3 +491,18 @@ html[data-nav='in']::view-transition-new(root) {
     animation: none !important;
   }
 }
+
+/* אול-אין: הריבר נהפך לאט - רגע של מתח */
+.card.kj-slow.kj-deal.kj-flip {
+  animation:
+    kjDeal 420ms var(--ease-deal) var(--d, 0ms) both,
+    kjFlip 950ms cubic-bezier(0.6, 0, 0.3, 1) calc(var(--d, 0ms) + 360ms) both;
+}
+.card.kj-slow.kj-deal.kj-flip::after {
+  animation-duration: 950ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .card.kj-slow.kj-deal.kj-flip {
+    animation: none !important;
+  }
+}

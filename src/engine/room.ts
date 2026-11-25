@@ -20,7 +20,9 @@ import {
   leaveHoldem,
   actHoldem,
   holdemPrivate,
+  runoutMs,
 } from './holdem.ts';
+import { botBanter, BOT_LINES, fillLine, type BotFx } from './botTalk.ts';
 
 export type GameType = 'blackjack' | 'holdem';
 export type Full = BJFull | HFull;
@@ -30,6 +32,10 @@ export interface ChatMsg {
   name: string;
   text: string;
   at: number;
+  key?: string; // שורה של בוט (כל אחד רואה אותה בשפה שלו)
+  vars?: Record<string, string>;
+  delay?: number; // אחרי כמה זמן להציג את הבועה בשולחן
+  fx?: BotFx; // אימוג׳י / זריקה שמגיעים עם השורה
 }
 
 export type RoomMove =
@@ -102,10 +108,23 @@ export const RESULT_MIN_MS = 3000;
 export function act(f: Full, actorId: string, move: RoomMove, now: number): { effects: LedgerEffect[]; closed?: boolean } {
   const pub = f.pub as Full['pub'] & { endedAt?: number };
   const before = pub.phase;
-  if (move.type === 'next' && now - (pub.endedAt ?? 0) < RESULT_MIN_MS) fail('רגע - תנו לכולם לראות את התוצאה');
+  const logLen = pub.kind === 'holdem' ? (pub.handLog?.length ?? 0) : 0;
+  // אחרי אול-אין הלוח נחשף לאט - היד הבאה מחכה שההצגה תיגמר
+  const ro = pub.kind === 'holdem' && pub.runout && pub.runout.hand === pub.handNo ? pub.runout : null;
+  const minMs = RESULT_MIN_MS + (ro ? runoutMs(ro.from) : 0);
+  if (move.type === 'next' && now - (pub.endedAt ?? 0) < minMs) fail('רגע - תנו לכולם לראות את התוצאה');
   const res = actInner(f, actorId, move, now);
   const after = f.pub.phase;
   if (after !== before && (after === 'showdown' || after === 'results')) (f.pub as typeof pub).endedAt = now;
+  if (!res.closed) {
+    const talk = botBanter(f.pub, { phase: before, logLen }, now);
+    if (talk) {
+      const chat = chatOf(f);
+      const [group, v] = talk.key.split(':');
+      chat.push({ id: talk.id, name: talk.name, text: fillLine(BOT_LINES[group].he[Number(v)], talk.vars), at: now, key: talk.key, vars: talk.vars, delay: talk.delay, fx: talk.fx });
+      if (chat.length > 40) chat.splice(0, chat.length - 40);
+    }
+  }
   return res;
 }
 

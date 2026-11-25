@@ -2,6 +2,7 @@
 import { type Card, newDeck, shuffle } from './cards.ts';
 import { bestFor, HAND_NAMES } from './handEval.ts';
 import { pokerBotPlan } from './pokerBot.ts';
+import { showdownEquity } from './equity.ts';
 import { type PlayerBase, type LedgerEffect, fail, turnMs, MAX_STRIKES, cashoutEffects } from './common.ts';
 
 export interface HPlayer extends PlayerBase {
@@ -103,7 +104,42 @@ export interface HState {
   blindLevel?: number;
   levelStartedAt?: number | null;
   buyCount?: Record<string, number>;
+  // אול-אין: הלוח נחשף לאט, ולכל שחקן - הסיכוי לנצח (באחוזים) בכל שלב
+  runout?: Runout | null;
+  // כולם קיפלו - אילו קלפים היו יוצאים ללוח ("מה היה יוצא?")
+  rabbit?: { hand: number; cards: Card[] } | null;
 }
+
+export interface Runout {
+  hand: number;
+  from: number; // כמה קלפים היו על הלוח כשכולם היו באול-אין
+  eq: Record<string, number[]>; // לכל שחקן: אחוז ניצחון בכל שלב (from, ואז כל רחוב עד 5 קלפים)
+}
+
+// כמה זמן ההצגה של אול-אין (מילישניות): הפסקה עם הקלפים הפתוחים, ואז כל רחוב, והריבר הכי לאט
+export const RUNOUT_STEP = { start: 1500, flop: 1700, turn: 1900, river: 2700 };
+// אורכי הלוח בכל שלב של ההצגה. למשל מ-0: [0, 3, 4, 5]
+export function runoutStages(from: number): number[] {
+  const out = [from];
+  for (const len of [3, 4, 5]) if (len > from) out.push(len);
+  return out;
+}
+// מתי נחשף כל שלב (מתחילת ההצגה), והאחרון = מתי מכריזים על המנצח
+export function runoutTimes(from: number): number[] {
+  const st = runoutStages(from);
+  const t = [0];
+  let acc = RUNOUT_STEP.start;
+  for (let i = 1; i < st.length; i++) {
+    t.push(acc);
+    acc += st[i] === 3 ? RUNOUT_STEP.flop : st[i] === 4 ? RUNOUT_STEP.turn : RUNOUT_STEP.river;
+  }
+  t.push(acc);
+  return t;
+}
+export const runoutMs = (from: number) => {
+  const t = runoutTimes(from);
+  return t[t.length - 1];
+};
 
 export interface HSecret {
   deck: Card[];
@@ -431,6 +467,8 @@ function startHand(f: HFull, now: number): LedgerEffect[] {
   s.winners = [];
   s.turnId = null;
   s.turnDeadline = null;
+  s.runout = null;
+  s.rabbit = null;
   f.sec.holes = {};
   const eligible = s.players.filter((p) => p.chips > 0 && !p.sitOut);
   if (eligible.length < 2) {
@@ -517,13 +555,15 @@ function advance(f: HFull, now: number, lastId: string | null) {
       showdown(f);
       return;
     }
-    dealStreet(f);
-    // אם רק שחקן אחד (או אף אחד) יכול לפעול - מריצים את הלוח עד הסוף
+    // אם רק שחקן אחד (או אף אחד) יכול לפעול - כל הקלפים נפתחים והלוח רץ עד הסוף, עם אחוזי ניצחון לכל שלב
     if (s.players.filter(canAct).length <= 1) {
+      const from = s.board.length;
       while (s.board.length < 5) dealStreet(f);
+      s.runout = makeRunout(f, from);
       showdown(f);
       return;
     }
+    dealStreet(f);
     lastId = null; // הראשון אחרי הדילר מתחיל
   }
 }
@@ -557,6 +597,18 @@ function winUncontested(f: HFull, w: HPlayer) {
   log(s, `${w.name} לקח/ה ${pot} 🏆`);
   // כמו בן אדם: לפעמים הבוט מראה מה היה לו (בלוף או יד אמיתית)
   if (w.isBot && f.sec.holes[w.id] && Math.random() < 0.07) w.shown = f.sec.holes[w.id];
+  // "מה היה יוצא?" - הקלפים הבאים בחפיסה, כולל שריפה לפני כל רחוב (כמו בחלוקה אמיתית)
+  if (s.board.length < 5) {
+    const deck = [...f.sec.deck];
+    const cards: Card[] = [];
+    for (let len = s.board.length; len < 5; ) {
+      deck.pop();
+      const k = len === 0 ? 3 : 1;
+      for (let i = 0; i < k; i++) cards.push(deck.pop()!);
+      len += k;
+    }
+    s.rabbit = { hand: s.handNo, cards };
+  }
   recordHand(s, 'fold', new Map());
   endHand(s);
 }
@@ -603,6 +655,22 @@ function showdown(f: HFull) {
   for (const w of s.winners) log(s, `${w.name} זכה/תה ב-${w.amount} עם ${HAND_NAMES[w.cat]} 🏆`);
   recordHand(s, 'showdown', evals);
   endHand(s);
+}
+
+// אחוזי הניצחון בכל שלב של אול-אין (הלוח המלא כבר חולק - מחשבים לכל אורך לוח בדרך)
+function makeRunout(f: HFull, from: number): Runout {
+  const s = f.pub;
+  const alive = s.players.filter((p) => p.inHand && !p.folded);
+  const holes = alive.map((p) => f.sec.holes[p.id]);
+  // באומהה כל הערכה יקרה פי 6 בערך - פחות דגימות
+  const samples = isOmaha(s) ? 350 : 900;
+  const eq: Record<string, number[]> = {};
+  for (const p of alive) eq[p.id] = [];
+  for (const len of runoutStages(from)) {
+    const e = showdownEquity(holes, s.board.slice(0, len), samples);
+    alive.forEach((p, i) => eq[p.id].push(Math.round(e[i] * 100)));
+  }
+  return { hand: s.handNo, from, eq };
 }
 
 // מחלק את הקופה לקופה ראשית וקופות צדדיות לפי כמה כל שחקן השקיע

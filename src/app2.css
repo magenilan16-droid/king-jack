@@ -2210,3 +2210,338 @@ label {
   height: 24px;
   margin-top: -9px;
 }
+
+/* ---------- תמונת פרופיל ---------- */
+.av-circle.av-photo {
+  overflow: hidden;
+  padding: 0;
+  background: var(--raised);
+}
+.av-circle.av-photo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.photo-row .btn {
+  flex: 1;
+  min-height: 46px;
+}
+.photo-row .btn.ghost {
+  flex: 0 0 auto;
+}
+.photo-hint {
+  margin: 0;
+}
+
+/* ---------- אוסף ההישגים ---------- */
+.ach {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ach-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.ach-head b {
+  font-family: var(--num);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--brass-hi);
+}
+.ach-head span {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.ach-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ach-tile {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto 1fr;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-items: start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+}
+.ach-tile:last-child:nth-child(odd) {
+  grid-column: span 2;
+}
+.ach-ic {
+  grid-row: span 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--text-3);
+  background: var(--surface-2);
+}
+.ach-tile b {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.ach-tile.on {
+  border-color: rgba(201, 162, 74, 0.45);
+  background: linear-gradient(180deg, rgba(201, 162, 74, 0.13), rgba(201, 162, 74, 0.03));
+}
+.ach-tile.on .ach-ic {
+  color: #1d1408;
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass));
+}
+.ach-tile.on b {
+  color: var(--ivory);
+}
+.ach-n {
+  justify-self: start;
+  font-family: var(--num);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--brass-hi);
+}
+.ach-how {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+.ach .hint {
+  margin: 0;
+}
+
+/* ---------- סיכום הערב ---------- */
+.ns {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ns > * {
+  animation: nsIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.ns > :nth-child(2) {
+  animation-delay: 0.14s;
+}
+.ns > :nth-child(3) {
+  animation-delay: 0.28s;
+}
+.ns > :nth-child(4) {
+  animation-delay: 0.4s;
+}
+@keyframes nsIn {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+.ns-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 5px;
+  padding: 24px 16px 18px;
+  border-radius: 18px;
+  text-align: center;
+  background: radial-gradient(90% 80% at 50% 0%, var(--baize-light), var(--baize-deep));
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 162, 74, 0.5),
+    0 0 0 4px rgba(59, 36, 22, 0.9),
+    0 0 0 5px rgba(201, 162, 74, 0.35);
+}
+.ns-av {
+  position: relative;
+  display: inline-flex;
+  margin: 10px 0 6px;
+}
+.ns-crown.kj-crown {
+  top: -17px;
+  width: 32px;
+  height: 25px;
+  border-radius: 8px;
+}
+.ns-kicker {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--brass-hi);
+}
+.ns-hero h2 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+}
+.ns-amt {
+  font-family: var(--num);
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--brass-hi);
+}
+.ns-meta {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.ns-rank {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+}
+.ns-rank li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line-soft);
+}
+.ns-rank li:first-child {
+  border-top: 0;
+}
+.ns-pos {
+  width: 18px;
+  text-align: center;
+  font-family: var(--num);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--brass);
+}
+.ns-rank b {
+  font-family: var(--num);
+  font-size: 19px;
+}
+.ns .pos {
+  color: var(--pos);
+}
+.ns .neg {
+  color: var(--neg);
+}
+.ns-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ns-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+}
+.ns-fact:last-child:nth-child(odd) {
+  grid-column: span 2;
+}
+.ns-fact > span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.ns-fact > b {
+  font-size: 19px;
+  font-weight: 700;
+}
+.ns-fact > b.num {
+  font-family: var(--num);
+  font-size: 25px;
+  color: var(--brass-hi);
+}
+.ns-fact.donor > b.num {
+  color: var(--neg);
+}
+.ns-fact small {
+  overflow: hidden;
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ns-cards {
+  display: flex;
+  gap: 2px;
+  margin-top: 6px;
+  direction: ltr;
+  justify-content: flex-end;
+}
+[dir='ltr'] .ns-cards {
+  justify-content: flex-start;
+}
+
+/* ---------- מה חדש ---------- */
+.wn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wn-list li {
+  display: flex;
+  gap: 14px;
+  padding: 13px 2px;
+  border-top: 1px solid var(--line-soft);
+  animation: nsIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 140ms);
+}
+.wn-list li:first-child {
+  border-top: 0;
+}
+.wn-ic {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--brass-hi);
+  background: rgba(201, 162, 74, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 74, 0.35);
+}
+.wn-list b {
+  display: block;
+  font-size: 15.5px;
+  font-weight: 700;
+}
+.wn-list .grow > span {
+  display: block;
+  margin-top: 2px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+.wn-link {
+  min-height: 32px;
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--brass-hi);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ns > *,
+  .wn-list li {
+    animation: none;
+  }
+}

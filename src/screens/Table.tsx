@@ -19,6 +19,7 @@ import {
   Timer as TimerIcon,
   Crown,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { useRoom } from '../lib/useRoom';
 import { gameCall, type Profile } from '../lib/supabase';
@@ -40,11 +41,12 @@ import { ChipStack } from '../components/Chips';
 import { ChatSheet, useChatNotifier } from '../components/Chat';
 import { InviteSheet } from '../components/InviteSheet';
 import { HandHistory } from '../components/HandHistory';
+import { NightSummary } from '../components/NightSummary';
 import { FxLayer } from '../components/FxLayer';
 import { BlackjackView } from './BlackjackView';
 import { HoldemView } from './HoldemView';
 import type { BJState } from '../engine/blackjack';
-import type { HState } from '../engine/holdem';
+import { type HState, runoutMs } from '../engine/holdem';
 
 // רווח הערב של שחקן: ז׳טונים (כולל מה שכרגע במשחק) + מה שכבר יצא - כל הקניות.
 // הקניות נספרות ממצב המשחק עצמו (buyCount) - כך אין "רווח" רגעי לשחקן שהצטרף לפני שהיומן הגיע
@@ -85,18 +87,30 @@ export function Table({
   const { tr, lang, setLang } = useI18n();
   const myId = profile.id;
   const { room, hole, ledger, refresh, connected } = useRoom(roomId, myId);
-  const { events, send } = useRoomFx(roomId, myId);
-  const [sheet, setSheet] = useState<null | 'menu' | 'settle' | 'chat' | 'invite' | 'rebuy' | 'join' | 'history' | 'emote'>(null);
+  const { events, send, inject } = useRoomFx(roomId, myId);
+  const [sheet, setSheet] = useState<null | 'menu' | 'settle' | 'chat' | 'invite' | 'rebuy' | 'join' | 'history' | 'emote' | 'night'>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [quip, setQuip] = useState(() => pick(theme.quips));
-  const [closedTab, setClosedTab] = useState<'settle' | 'hands'>('settle');
+  const [closedTab, setClosedTab] = useState<'night' | 'settle' | 'hands'>('night');
   const s = room?.state;
   const chat = s?.chat ?? [];
-  const { unread, bubble } = useChatNotifier(s ? chat : undefined, myId, sheet === 'chat');
+  const { unread, bubble } = useChatNotifier(s ? chat : undefined, myId, sheet === 'chat', (m) => {
+    if (m.fx?.kind === 'emote') inject({ kind: 'emote', from: m.id, emoji: m.fx.emoji });
+    else if (m.fx?.kind === 'throw') inject({ kind: 'throw', from: m.id, to: m.fx.to, item: m.fx.item });
+  });
   // מלך הערב: מי הכי ברווח בשולחן הזה (מתעדכן רק בין ידיים)
   const [king, setKing] = useState<string | null>(null);
   const [kingCast, setKingCast] = useState<{ id: string; name: string; k: number } | null>(null);
   const kingReady = useRef(false);
+  // אחרי אול-אין הלוח נחשף לאט - מלך הערב מתעדכן רק בסוף ההצגה (שלא יגלה מי ניצח)
+  const [kingHold, setKingHold] = useState<number | null>(null);
+  const roHand = s && s.kind === 'holdem' && s.phase === 'showdown' && s.runout && s.runout.hand === s.handNo ? s.runout : null;
+  useEffect(() => {
+    if (!roHand) return;
+    const hand = roHand.hand;
+    const t = setTimeout(() => setKingHold(hand), runoutMs(roHand.from) + 300);
+    return () => clearTimeout(t);
+  }, [roHand?.hand, roHand?.from]);
   // בקשות "תראה!" של היד האחרונה
   const [showReq, setShowReq] = useState<{ hand: number; to: string; from: string[] } | null>(null);
   const seenFx = useRef(new Set<string>());
@@ -117,6 +131,7 @@ export function Table({
     if (!s) return;
     const settled = s.kind === 'holdem' ? s.phase === 'waiting' || s.phase === 'showdown' : s.phase === 'betting' || s.phase === 'results';
     if (!settled) return;
+    if (roHand && kingHold !== roHand.hand) return;
     const nets = s.players.map((p) => ({ p, net: nightNet(s, ledger, p).net }));
     const best = Math.max(0, ...nets.map((n) => n.net));
     const top = nets.filter((n) => best > 0 && n.net === best);
@@ -139,7 +154,7 @@ export function Table({
     }
     kingReady.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s, ledger]);
+  }, [s, ledger, kingHold]);
   const BackIcon = lang === 'he' ? ArrowRight : ArrowLeft;
 
   // בדיחה מתחלפת כל 25 שניות
@@ -209,14 +224,23 @@ export function Table({
             <Flag size={18} /> {tr('השולחן נסגר. זה הסיכום של הערב.', 'The table is closed. Here is the night summary.')}
           </div>
           <div className="tabs" role="tablist">
+            <button role="tab" aria-selected={closedTab === 'night'} className={closedTab === 'night' ? 'active' : ''} onClick={() => setClosedTab('night')}>
+              {tr('סיכום הערב', 'The night')}
+            </button>
             <button role="tab" aria-selected={closedTab === 'settle'} className={closedTab === 'settle' ? 'active' : ''} onClick={() => setClosedTab('settle')}>
-              {tr('מאזן וחובות', 'Balance & debts')}
+              {tr('חובות', 'Debts')}
             </button>
             <button role="tab" aria-selected={closedTab === 'hands'} className={closedTab === 'hands' ? 'active' : ''} onClick={() => setClosedTab('hands')}>
-              {tr('היסטוריית ידיים', 'Hand history')}
+              {tr('ידיים', 'Hands')}
             </button>
           </div>
-          {closedTab === 'settle' ? <Settle room={room} ledger={ledger} moneyMode={moneyMode} /> : <HandHistory roomId={roomId} myId={myId} />}
+          {closedTab === 'night' ? (
+            <NightSummary room={room} ledger={ledger} />
+          ) : closedTab === 'settle' ? (
+            <Settle room={room} ledger={ledger} moneyMode={moneyMode} />
+          ) : (
+            <HandHistory roomId={roomId} myId={myId} />
+          )}
           <button className="btn primary block big" onClick={onExit}>
             {tr('חזרה ללובי', 'Back to lobby')}
           </button>
@@ -433,6 +457,11 @@ export function Table({
               <Scale size={19} /> {tr('מאזן וחובות', 'Balance & debts')}
             </span>
           </button>
+          <button className="menu-item" onClick={() => setSheet('night')}>
+            <span className="mi">
+              <Sparkles size={19} /> {tr('סיכום הערב עד עכשיו', 'The night so far')}
+            </span>
+          </button>
           {hd && me && (
             <button className="menu-item" onClick={() => actSafe({ type: 'sitOut', value: !(me as HState['players'][number]).sitOut })}>
               <span className="mi">
@@ -551,6 +580,10 @@ export function Table({
 
       <Sheet open={sheet === 'settle'} onClose={() => setSheet(null)} title={tr('מאזן וחובות', 'Balance & debts')}>
         <Settle room={room} ledger={ledger} moneyMode={moneyMode} />
+      </Sheet>
+
+      <Sheet open={sheet === 'night'} onClose={() => setSheet(null)} title={tr('סיכום הערב עד עכשיו', 'The night so far')}>
+        <NightSummary room={room} ledger={ledger} refreshKey={handKey} />
       </Sheet>
 
       <Sheet open={sheet === 'history'} onClose={() => setSheet(null)} title={tr('היסטוריית ידיים', 'Hand history')}>

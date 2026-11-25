@@ -1,6 +1,6 @@
 // סימולציה: מריץ הרבה ידיים ובודק שאין ז׳טונים שנעלמים
 import { createGame, act, joinGame, type Full } from '../src/engine/room.ts';
-import { type HFull, potLimitTo } from '../src/engine/holdem.ts';
+import { type HFull, potLimitTo, runoutStages, runoutMs } from '../src/engine/holdem.ts';
 import type { BJFull } from '../src/engine/blackjack.ts';
 import { settle } from '../src/engine/settle.ts';
 import { bestHand } from '../src/engine/handEval.ts';
@@ -27,6 +27,8 @@ for (const variant of [undefined, 'omaha'] as const) {
   let bought = effects.reduce((a, e) => a + e.amount, 0);
   let cashed = 0;
   let sidePots = 0;
+  let runouts = 0;
+  let rabbits = 0;
   bought += joinGame(f, human('h2'), 1000).reduce((a, e) => a + e.amount, 0);
   for (let i = 0; i < 4; i++) bought += act(f, 'h1', { type: 'addBot' }, now).effects.reduce((a, e) => a + e.amount, 0);
   act(f, 'h1', { type: 'start' }, now);
@@ -84,13 +86,44 @@ for (const variant of [undefined, 'omaha'] as const) {
     }
     if (f.pub.players.filter((x) => x.isBot).length < 2) bought += act(f, 'h1', { type: 'addBot' }, now).effects.reduce((a, e) => a + e.amount, 0);
     const before = f.pub.players.length;
-    now += 5000; // מסך התוצאה מוצג לפחות 3 שניות
+    // אול-אין: האחוזים בכל שלב מסתכמים ל-100, ובשלב האחרון המנצח מקבל את החלק שלו
+    const ro = f.pub.runout && f.pub.runout.hand === f.pub.handNo ? f.pub.runout : null;
+    if (ro) {
+      runouts++;
+      const ids = Object.keys(ro.eq);
+      const stages = runoutStages(ro.from).length;
+      for (let k = 0; k < stages; k++) {
+        const sum = ids.reduce((a, id) => a + ro.eq[id][k], 0);
+        if (Math.abs(sum - 100) > ids.length) throw new Error(`runout stage ${k} sums to ${sum}`);
+      }
+      const shownAll = lh.players.filter((x) => !x.folded).every((x) => x.shown);
+      if (!shownAll) throw new Error('runout: not all hands shown');
+      for (const id of ids) if (ro.eq[id][stages - 1] === 0 && lh.winners.some((w) => w.id === id && lh.pots[0].winners.includes(id))) throw new Error('runout: main pot winner at 0%');
+    }
+    // "מה היה יוצא": כולם קיפלו - הקלפים שהיו יוצאים, בלי כפילויות עם הלוח
+    if (lh.reason === 'fold' && f.pub.board.length < 5) {
+      const rb = f.pub.rabbit;
+      if (!rb || rb.hand !== f.pub.handNo || rb.cards.length !== 5 - f.pub.board.length) throw new Error('rabbit missing');
+      if (new Set([...f.pub.board, ...rb.cards]).size !== 5) throw new Error('rabbit duplicates');
+      rabbits++;
+    }
+    // מוקדם מדי ליד הבאה אחרי אול-אין - השרת מסרב
+    if (ro) {
+      let refused = false;
+      try {
+        act(f, 'h1', { type: 'next' }, now + 3500);
+      } catch {
+        refused = true;
+      }
+      if (!refused) throw new Error('next allowed during runout show');
+    }
+    now += 5000 + (ro ? runoutMs(ro.from) : 0); // מסך התוצאה מוצג לפחות 3 שניות (ואחרי אול-אין - גם ההצגה)
     const res = act(f, 'h1', f.pub.phase === 'waiting' ? { type: 'start' } : { type: 'next' }, now);
     cashed += res.effects.filter((e) => e.kind === 'cashout').reduce((a, e) => a + e.amount, 0);
     bought += res.effects.filter((e) => e.kind === 'buyin').reduce((a, e) => a + e.amount, 0);
     void before;
   }
-  console.log(`${variant ?? 'holdem'} OK, hands:`, f.pub.handNo, 'hands with side pots:', sidePots);
+  console.log(`${variant ?? 'holdem'} OK, hands:`, f.pub.handNo, 'hands with side pots:', sidePots, 'all-in shows:', runouts, 'rabbit hunts:', rabbits, 'bot lines:', (f.pub as { chat?: unknown[] }).chat?.length ?? 0);
 }
 
 // ---- בלאק ג׳ק ----

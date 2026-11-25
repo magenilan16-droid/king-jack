@@ -13,6 +13,7 @@ export function Card({
   deal = false,
   flip = false,
   style,
+  className = '',
 }: {
   card: C | null;
   size?: Size;
@@ -21,9 +22,10 @@ export function Card({
   deal?: boolean;
   flip?: boolean;
   style?: CSSProperties;
+  className?: string;
 }) {
   const st = { ...(style ?? {}), '--d': `${delay}ms` } as CSSProperties;
-  const motion = `${deal ? 'kj-deal' : ''} ${flip && card ? 'kj-flip' : ''}`;
+  const motion = `${deal ? 'kj-deal' : ''} ${flip && card ? 'kj-flip' : ''} ${className}`;
   if (!card)
     return (
       <div className={`card back ${size} ${motion}`} style={st}>
