@@ -17,6 +17,7 @@ import { Admin } from './screens/Admin';
 import { ProfileScreen } from './screens/Profile';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { WhatsNew } from './components/WhatsNew';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 type Route = { name: 'lobby' } | { name: 'table'; roomId: string } | { name: 'stats' } | { name: 'install' } | { name: 'debts' } | { name: 'admin' } | { name: 'profile' };
 
@@ -241,7 +242,9 @@ export default function App() {
 
   return (
     <>
-      {screen}
+      <ErrorBoundary key={route.name === 'table' ? 'table-' + route.roomId : route.name} onHome={() => setRoute({ name: 'lobby' })}>
+        {screen}
+      </ErrorBoundary>
       {showNav && <BottomNav tab={route.name as Tab} onTab={(t) => setRoute({ name: t } as Route)} debtBadge={debtCount} />}
       {showNav && !invite && <WhatsNew onPhoto={() => setRoute({ name: 'profile' })} />}
       <Sheet open={!!invite} onClose={() => invite && (markSeen(invite.id), setInvite(null))} title={tr('הזמנה למשחק', 'Game invite')}>

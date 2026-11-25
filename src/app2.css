@@ -2545,3 +2545,23 @@ label {
     animation: none;
   }
 }
+
+/* ---------- מסך תקלה ---------- */
+.crash-screen {
+  padding: 24px;
+}
+.crash-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(360px, 100%);
+  text-align: center;
+}
+.crash-box h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.crash-box p {
+  margin: 0 0 8px;
+  color: var(--text-2);
+}

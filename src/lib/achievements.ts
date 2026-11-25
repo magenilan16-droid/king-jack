@@ -34,7 +34,7 @@ export function holdemAch(rec: HoldemHandRecord, id: string): AchId[] {
   }
   if (w.cat === 7) out.push('quads');
   if (rec.variant !== 'omaha' && p.shown?.length === 2 && p.shown.map(rank).sort().join('') === '27') out.push('seventwo');
-  if (w.amount >= 100 * Math.max(1, rec.blinds[1])) out.push('monster');
+  if (w.amount >= 100 * Math.max(1, rec.blinds?.[1] ?? 1)) out.push('monster');
   if (rec.reason === 'fold' && p.shown?.length) {
     if (rec.board.length >= 3) {
       if (bestFor(p.shown, rec.board).cat === 0) out.push('bluff');
