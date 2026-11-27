@@ -110,6 +110,49 @@ async function createDebts(roomId: string) {
   }
 }
 
+// ---------- שיחה בשולחן ----------
+// שם הערוץ של השיחה נגזר מהשולחן בחתימה סודית - רק מי שיושב בשולחן מקבל אותו מהשרת
+async function callTopic(roomId: string) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode('call:' + roomId)));
+  return 'call-' + Array.from(sig.slice(0, 12), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// שרתי ממסר (TURN) של Cloudflare: כשהטלפונים לא מצליחים לדבר ישירות (למשל בסלולר) הקול עובר דרכם.
+// המפתח יושב ב-game_config. בלי מפתח - רק STUN (עובד ברוב רשתות ה-WiFi)
+const STUN_ONLY = [{ urls: ['stun:stun.cloudflare.com:3478', 'stun:stun.l.google.com:19302'] }];
+let iceCache: { at: number; servers: unknown[] } | null = null;
+async function iceServers(): Promise<unknown[]> {
+  if (iceCache && Date.now() - iceCache.at < 6 * 3600 * 1000) return iceCache.servers;
+  const { data } = await admin.from('game_config').select('key, value').in('key', ['turn_key_id', 'turn_key_token']);
+  const m = Object.fromEntries((data ?? []).map((r: { key: string; value: string }) => [r.key, r.value]));
+  if (!m.turn_key_id || !m.turn_key_token) return STUN_ONLY;
+  try {
+    const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${m.turn_key_id}/credentials/generate-ice-servers`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${m.turn_key_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl: 86400 }),
+    });
+    if (!r.ok) throw new Error('turn ' + r.status);
+    const j = await r.json();
+    const list = (Array.isArray(j.iceServers) ? j.iceServers : [j.iceServers]).filter(Boolean);
+    // דפדפנים חוסמים את פורט 53 - מורידים כתובות כאלה כדי שהחיבור לא יתעכב
+    const servers = list
+      .map((s: { urls: string | string[]; username?: string; credential?: string }) => ({
+        ...s,
+        urls: (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => !/:53(\?|$)/.test(u)),
+      }))
+      .filter((s: { urls: string[] }) => s.urls.length);
+    if (!servers.length) throw new Error('turn empty');
+    iceCache = { at: Date.now(), servers };
+    return servers;
+  } catch (e) {
+    console.error('turn', (e as Error).message);
+    return STUN_ONLY;
+  }
+}
+
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -359,6 +402,21 @@ Deno.serve(async (req) => {
           tag: `nudge-${room.id}`,
         })),
       );
+      return json({ ok: true });
+    }
+
+    // שיחה בשולחן: רק מי שיושב מקבל את הערוץ הסודי ואת שרתי הממסר
+    if (body.op === 'callInfo') {
+      const { data: room } = await admin.from('game_rooms').select('id, status, state').eq('id', body.roomId).single();
+      if (!room || room.status !== 'open') return json({ error: 'השולחן נסגר' }, 400);
+      if (!room.state.players.some((p: { id: string }) => p.id === userId)) return json({ error: 'אתה לא בשולחן' }, 403);
+      const [topic, servers] = await Promise.all([callTopic(room.id), iceServers()]);
+      return json({ ok: true, topic, iceServers: servers });
+    }
+    // דיווח מהטלפון איך החיבור בשיחה עבר (לאבחון בלבד, בלי תוכן)
+    if (body.op === 'callDiag') {
+      const f = (v: unknown) => String(v ?? '').slice(0, 16);
+      console.log('callDiag', JSON.stringify({ u: userId.slice(0, 8), status: f(body.status), local: f(body.local), remote: f(body.remote), proto: f(body.proto), relay: !!body.relay, n: Number(body.n) || 0 }));
       return json({ ok: true });
     }
 

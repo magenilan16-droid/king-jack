@@ -2857,3 +2857,133 @@ label {
     animation: none;
   }
 }
+
+/* ---------- שיחה בשולחן ---------- */
+/* כפתור השיחה - בפינה השמאלית התחתונה, מול המיקרופון */
+.tbl-call {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(201, 162, 74, 0.55);
+  background: rgba(6, 16, 12, 0.78);
+  color: var(--ivory);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.tbl-call:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 3px;
+}
+.tbl-call:active {
+  transform: scale(0.94);
+}
+.tbl-call:disabled {
+  opacity: 1;
+}
+/* חברים כבר בשיחה - ירוק ומזמין */
+.tbl-call.live {
+  background: #22704a;
+  border-color: #5fc38c;
+  animation: kjCallInvite 2.4s ease-out infinite;
+}
+/* אני בשיחה - אדום = יציאה */
+.tbl-call.on {
+  background: #a3302a;
+  border-color: #e5675e;
+}
+.tbl-call .spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 2.5px;
+}
+.tc-n {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--ivory);
+  color: #10241a;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 0 0 2px rgba(6, 16, 12, 0.9);
+}
+@keyframes kjCallInvite {
+  0% {
+    box-shadow:
+      0 6px 16px rgba(0, 0, 0, 0.45),
+      0 0 0 0 rgba(95, 195, 140, 0.55);
+  }
+  70%,
+  100% {
+    box-shadow:
+      0 6px 16px rgba(0, 0, 0, 0.45),
+      0 0 0 14px rgba(95, 195, 140, 0);
+  }
+}
+/* המיקרופון בזמן שיחה: פתוח = מסגרת ירוקה וטבעת כשאני מדבר, מושתק = אדום */
+.tbl-mic.in-call {
+  border-color: rgba(95, 195, 140, 0.75);
+  transition: box-shadow 0.12s ease;
+}
+.tbl-mic.in-call.talk {
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.45),
+    0 0 0 3px rgba(243, 237, 224, 0.85),
+    0 0 18px rgba(243, 237, 224, 0.45);
+}
+.tbl-mic.in-call.muted {
+  background: #5c2420;
+  border-color: #e5675e;
+  color: #ffd9d5;
+}
+
+/* מושבים: סימן קטן למי שבשיחה, טבעת שנהב זוהרת למי שמדבר עכשיו */
+.felt [data-call] .pk-av::after {
+  content: '';
+  position: absolute;
+  z-index: 4;
+  top: -3px;
+  right: -6px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #22704a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z'/%3E%3Cpath d='M19 10v2a7 7 0 0 1-14 0v-2'/%3E%3Cpath d='M12 19v3'/%3E%3C/svg%3E") center / 11px no-repeat;
+  box-shadow: 0 0 0 1.5px rgba(6, 13, 10, 0.9);
+  pointer-events: none;
+}
+.felt [data-call][data-mute] .pk-av::after {
+  background-color: #6e2a25;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z'/%3E%3Cpath d='M19 10v2a7 7 0 0 1-14 0v-2'/%3E%3Cpath d='M12 19v3'/%3E%3Cpath d='M3 3l18 18'/%3E%3C/svg%3E");
+}
+.felt [data-talk] .av-circle {
+  box-shadow:
+    0 0 0 2.5px rgba(243, 237, 224, 0.95),
+    0 0 16px rgba(243, 237, 224, 0.55);
+  animation: kjTalk 0.7s ease-in-out infinite alternate;
+}
+@keyframes kjTalk {
+  to {
+    box-shadow:
+      0 0 0 3.5px rgba(243, 237, 224, 0.95),
+      0 0 22px rgba(243, 237, 224, 0.7);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tbl-call.live,
+  .felt [data-talk] .av-circle {
+    animation: none;
+  }
+}

@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import { supabase, gameCall } from './supabase';
 import { voiceOut } from './sound';
+import { callMicStream } from './call';
 import { VOICE_MAX_S } from '../engine/room';
 
 const BUCKET = 'game-voice';
@@ -54,7 +55,17 @@ let recordingNow = false;
 
 export async function startRecording(): Promise<Recording> {
   stopVoice(); // שלא ייכנס למיקרופון מה שמתנגן
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+  // באמצע שיחה בשולחן - מקליטים מאותו מיקרופון (העתק שלו), כדי לא לסגור לשיחה את המיקרופון
+  const shared = callMicStream();
+  const stream = shared
+    ? new MediaStream(
+        shared.getAudioTracks().map((t) => {
+          const c = t.clone();
+          c.enabled = true;
+          return c;
+        }),
+      )
+    : await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
   const mime = FORMATS.find((m) => MediaRecorder.isTypeSupported?.(m));
   let rec: MediaRecorder;
   try {

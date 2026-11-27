@@ -1,11 +1,12 @@
 // הקלטת הודעה קולית: הלוגיקה המשותפת (צ׳אט + כפתור המיקרופון בשולחן), והכפתור עצמו.
 // בכפתור בשולחן: מחזיקים ומדברים, משחררים = נשלח. נגיעה קצרה = מצב הקלטה עם "שלח" ו"בטל".
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { Mic, Send, X } from 'lucide-react';
+import { Mic, MicOff, Send, X } from 'lucide-react';
 import { toast } from './ui';
 import { useI18n } from '../lib/i18n';
 import { VOICE_MAX_S } from '../engine/room';
 import { fmtDur, sendVoice, startRecording, type Recording } from '../lib/voice';
+import { callMute, useCall } from '../lib/call';
 
 export type RecPhase = 'idle' | 'starting' | 'rec' | 'sending';
 
@@ -100,13 +101,25 @@ export function useVoiceRecorder(roomId: string, myId: string, onSent?: () => vo
 
 export const recClock = (secs: number) => `0:${String(Math.floor(secs)).padStart(2, '0')}`;
 
-const SIZE = 48;
+export const SIZE = 48;
 const HOLD_MS = 550; // החזקה ארוכה מזה = "מחזיקים ומדברים". קצרה = מצב הקלטה עם כפתור שליחה
 const AWAY_PX = 70; // גרירה רחוקה מהכפתור = ביטול
 
-// הכפתור יושב בפינה הימנית התחתונה של השולחן, ממש מעל אזור הפעולות (בפוקר ובבלאק ג׳ק)
-function useAnchor() {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+// הכפתור יושב בפינה הימנית התחתונה של השולחן, ממש מעל אזור הפעולות (בפוקר ובבלאק ג׳ק).
+// call = איפה יושב כפתור השיחה: בפינה השמאלית התחתונה, ואם יש שם מושב - מעל המיקרופון או לידו
+type Spot = { top: number; left: number };
+const hits = (a: Spot, r: DOMRect) => !(r.right < a.left - 4 || r.left > a.left + SIZE + 4 || r.bottom < a.top - 4 || r.top > a.top + SIZE + 4);
+function callSpot(mic: Spot, start: number): Spot {
+  const seats = [...document.querySelectorAll('.felt [data-pid]:not(.me):not(.bk-me), .felt .bk-meplate')].map((e) => e.getBoundingClientRect());
+  const opts = [
+    { top: mic.top, left: start },
+    { top: mic.top - SIZE - 12, left: mic.left },
+    { top: mic.top, left: mic.left - SIZE - 12 },
+  ];
+  return opts.find((o) => !seats.some((r) => hits(o, r))) ?? opts[0];
+}
+export function useAnchor() {
+  const [pos, setPos] = useState<{ top: number; left: number; call: Spot } | null>(null);
   useEffect(() => {
     let el: Element | null = null;
     const ro = new ResizeObserver(() => measure());
@@ -118,11 +131,12 @@ function useAnchor() {
         if (el) ro.observe(el);
       }
       const r = el?.getBoundingClientRect();
-      const next =
+      const mic =
         r && r.height > 0
           ? { top: Math.round(r.top - SIZE - 6), left: Math.round(r.right - SIZE - 12) }
           : { top: Math.round(window.innerHeight - SIZE - 20), left: Math.round(Math.min(window.innerWidth, 560) - SIZE - 12) };
-      setPos((p) => (p && p.top === next.top && p.left === next.left ? p : next));
+      const call = callSpot(mic, r && r.height > 0 ? Math.round(r.left + 12) : 12);
+      setPos((p) => (p && p.top === mic.top && p.left === mic.left && p.call.top === call.top && p.call.left === call.left ? p : { ...mic, call }));
     }
     measure();
     const t = window.setInterval(measure, 700);
@@ -140,6 +154,7 @@ export function TableMic({ roomId, myId }: { roomId: string; myId: string }) {
   const { tr } = useI18n();
   const { phase, secs, start, finish, cancel } = useVoiceRecorder(roomId, myId);
   const pos = useAnchor();
+  const call = useCall();
   const [mode, setMode] = useState<'hold' | 'lock'>('hold');
   const [away, setAway] = useState(false);
   const press = useRef<{ at: number; x: number; y: number } | null>(null);
@@ -201,6 +216,20 @@ export function TableMic({ roomId, myId }: { roomId: string; myId: string }) {
   };
 
   if (!pos) return null;
+  // באמצע שיחה בשולחן כולם כבר שומעים אותי - הכפתור הופך להשתקה
+  if (call.status === 'on' && !busy)
+    return (
+      <button
+        type="button"
+        className={`tbl-mic in-call ${call.muted ? 'muted' : ''} ${!call.muted && call.talking.includes(myId) ? 'talk' : ''}`}
+        style={{ top: pos.top, left: pos.left, width: SIZE, height: SIZE }}
+        aria-label={call.muted ? tr('המיקרופון מושתק. לחצו כדי לדבר', 'Mic is muted. Tap to talk') : tr('המיקרופון פתוח. לחצו להשתקה', 'Mic is on. Tap to mute')}
+        aria-pressed={call.muted}
+        onClick={() => callMute(!call.muted)}
+      >
+        {call.muted ? <MicOff size={22} strokeWidth={2.1} /> : <Mic size={22} strokeWidth={2.1} />}
+      </button>
+    );
   const pct = Math.min(100, (secs / VOICE_MAX_S) * 100);
   const label = !busy ? tr('הודעה קולית: החזיקו ודברו', 'Voice message: hold and talk') : locked ? tr('שלח הודעה קולית', 'Send voice message') : tr('מקליט', 'Recording');
   return (

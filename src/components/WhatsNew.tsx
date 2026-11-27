@@ -1,14 +1,22 @@
 // "מה חדש" - נפתח פעם אחת אחרי עדכון גדול, כדי שהחברים יגלו את השדרוגים
 import { useState } from 'react';
-import { Tv, Share2, Camera, Award, Bot, Eye, Mic, type LucideIcon } from 'lucide-react';
+import { Tv, Share2, Camera, Award, Bot, Eye, Mic, Phone, type LucideIcon } from 'lucide-react';
 import { Sheet } from './ui';
 import { useI18n } from '../lib/i18n';
 
 const KEY = 'kj-news';
-const VERSION = '2026-11-27';
+const VERSION = '2026-11-27b';
 
 // v = באיזה עדכון הפריט נוסף. מי שכבר ראה עדכון קודם רואה רק את מה שנוסף אחריו
 const ITEMS: { v: string; icon: LucideIcon; he: string; en: string; heSub: string; enSub: string; photo?: boolean }[] = [
+  {
+    v: '2026-11-27b',
+    icon: Phone,
+    he: 'שיחה חיה בשולחן',
+    en: 'Live table call',
+    heSub: 'לוחצים על כפתור הטלפון בשולחן ומדברים עם כל מי שבשיחה, כמו שיחה קבוצתית. כפתור המיקרופון משתיק.',
+    enSub: 'Tap the phone button at the table and talk with everyone on the call, like a group call. The mic button mutes you.',
+  },
   {
     v: '2026-11-27',
     icon: Mic,

@@ -41,6 +41,8 @@ import { ChipStack } from '../components/Chips';
 import { ChatSheet, useChatNotifier } from '../components/Chat';
 import { TableMic } from '../components/VoiceRecorder';
 import { canRecord } from '../lib/voice';
+import { TableCall } from '../components/TableCall';
+import { useTableCall } from '../lib/call';
 import { InviteSheet } from '../components/InviteSheet';
 import { HandHistory } from '../components/HandHistory';
 import { NightSummary } from '../components/NightSummary';
@@ -96,6 +98,9 @@ export function Table({
   const [closedTab, setClosedTab] = useState<'night' | 'settle' | 'hands'>('night');
   const s = room?.state;
   const chat = s?.chat ?? [];
+  // שיחה חיה בשולחן - זמינה למי שיושב
+  const seated = !!s?.players.some((p) => p.id === myId) && room?.status === 'open';
+  useTableCall(roomId, myId, seated);
   const { unread, bubble } = useChatNotifier(s ? chat : undefined, myId, sheet === 'chat', (m) => {
     if (m.fx?.kind === 'emote') inject({ kind: 'emote', from: m.id, emoji: m.fx.emoji });
     else if (m.fx?.kind === 'throw') inject({ kind: 'throw', from: m.id, to: m.fx.to, item: m.fx.item });
@@ -348,6 +353,15 @@ export function Table({
 
       <FxLayer events={events} chatBubble={bubble} />
       {me && canRecord() && <TableMic roomId={roomId} myId={myId} />}
+      {me && (
+        <TableCall
+          myId={myId}
+          nameOf={(id) => {
+            const p = s.players.find((x) => x.id === id);
+            return p ? displayName(p, lang) : tr('חבר', 'a friend');
+          }}
+        />
+      )}
       {kingCast && (
         <div className="kj-kingcast" key={kingCast.k} role="status">
           <Crown size={20} strokeWidth={2.2} />
