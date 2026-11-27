@@ -14,8 +14,8 @@ const ITEMS: { v: string; icon: LucideIcon; he: string; en: string; heSub: strin
     icon: Mic,
     he: 'הודעות קוליות בשולחן',
     en: 'Voice messages at the table',
-    heSub: 'בצ׳אט לוחצים על המיקרופון ומדברים עד 15 שניות. כל השולחן שומע מיד.',
-    enSub: 'In the chat, tap the mic and talk for up to 15 seconds. The whole table hears it right away.',
+    heSub: 'מחזיקים את המיקרופון בפינת השולחן, מדברים ומשחררים. עד 15 שניות, וכל השולחן שומע מיד.',
+    enSub: 'Hold the mic in the corner of the table, talk and let go. Up to 15 seconds, and the whole table hears it right away.',
   },
   {
     v: '2026-11-25',

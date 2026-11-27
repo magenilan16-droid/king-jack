@@ -1,5 +1,5 @@
 // צ׳אט השולחן + תגובות מהירות לפי ערכת הנושא
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Mic, Play, Send, Square, X } from 'lucide-react';
 import type { ChatMsg } from '../engine/room';
 import type { Theme } from '../lib/themes';
@@ -9,7 +9,8 @@ import { useI18n } from '../lib/i18n';
 import { chatName, chatText } from '../lib/display';
 import { isMuted } from '../lib/sound';
 import { VOICE_MAX_S } from '../engine/room';
-import { canRecord, fmtDur, playVoice, prefetchVoice, queueVoice, sendVoice, startRecording, useVoicePlaying, voiceAuto, type Recording } from '../lib/voice';
+import { canRecord, fmtDur, playVoice, prefetchVoice, queueVoice, useVoicePlaying, voiceAuto } from '../lib/voice';
+import { recClock, useVoiceRecorder } from './VoiceRecorder';
 
 // onFx: הודעה של בוט שמגיעה עם אימוג׳י / זריקה
 export function useChatNotifier(chat: ChatMsg[] | undefined, myId: string, open: boolean, onFx?: (m: ChatMsg) => void) {
@@ -172,79 +173,17 @@ export function VoiceBars() {
   );
 }
 
-// הקלטה: לחיצה על המיקרופון מתחילה, "שלח" שולח, "בטל" זורק. אחרי 15 שניות נשלח לבד
+// הקלטה בצ׳אט: לחיצה על המיקרופון מתחילה, "שלח" שולח, "בטל" זורק. אחרי 15 שניות נשלח לבד
 function VoiceBar({ open, roomId, myId, onSent, children }: { open: boolean; roomId: string; myId: string; onSent: () => void; children: (start: () => void) => React.ReactNode }) {
   const { tr } = useI18n();
-  const [phase, setPhase] = useState<'idle' | 'starting' | 'rec' | 'sending'>('idle');
-  const [secs, setSecs] = useState(0);
-  const rec = useRef<Recording | null>(null);
+  const { phase, secs, start, finish, cancel } = useVoiceRecorder(roomId, myId, onSent);
 
-  const cancel = useCallback(() => {
-    rec.current?.cancel();
-    rec.current = null;
-    setPhase('idle');
-  }, []);
-
-  const finish = useCallback(async () => {
-    const r = rec.current;
-    if (!r) return;
-    rec.current = null;
-    setPhase('sending');
-    try {
-      const out = await r.stop();
-      if (out.dur < 0.7 || out.blob.size < 500) {
-        toast(tr('ההקלטה קצרה מדי. לוחצים על המיקרופון, מדברים, ואז "שלח"', 'Too short. Tap the mic, talk, then Send'), 'error');
-        setPhase('idle');
-        return;
-      }
-      await sendVoice(myId, roomId, out);
-      setPhase('idle');
-      onSent();
-    } catch (e) {
-      toast((e as Error).message || tr('ההקלטה לא נשלחה', 'The voice message was not sent'), 'error');
-      setPhase('idle');
-    }
-  }, [myId, roomId, onSent, tr]);
-
-  const start = async () => {
-    if (phase !== 'idle') return;
-    setPhase('starting');
-    setSecs(0);
-    try {
-      rec.current = await startRecording();
-      setPhase('rec');
-    } catch (e) {
-      const denied = (e as Error).name === 'NotAllowedError' || (e as Error).name === 'SecurityError';
-      toast(
-        denied
-          ? tr('אין גישה למיקרופון. צריך לאשר מיקרופון לאתר בהגדרות הדפדפן', 'No microphone access. Allow the microphone for this site in your browser settings')
-          : tr('לא הצלחתי להפעיל את המיקרופון', 'Could not start the microphone'),
-        'error',
-      );
-      setPhase('idle');
-    }
-  };
-
-  // שעון + שליחה אוטומטית בסוף הזמן
+  // סגירת החלון באמצע הקלטה = ביטול
   useEffect(() => {
-    if (phase !== 'rec') return;
-    const t = window.setInterval(() => {
-      const r = rec.current;
-      if (!r) return;
-      const s = (performance.now() - r.started) / 1000;
-      setSecs(s);
-      if (s >= VOICE_MAX_S) void finish();
-    }, 200);
-    return () => window.clearInterval(t);
-  }, [phase, finish]);
+    if (!open && phase !== 'idle' && phase !== 'sending') cancel();
+  }, [open, phase, cancel]);
 
-  // סגירת החלון באמצע הקלטה = ביטול. וגם ביציאה מהמסך
-  useEffect(() => {
-    if (!open && rec.current) cancel();
-  }, [open, cancel]);
-  useEffect(() => () => rec.current?.cancel(), []);
-
-  if (phase === 'idle') return <>{children(start)}</>;
+  if (phase === 'idle') return <>{children(() => void start())}</>;
   const pct = Math.min(100, (secs / VOICE_MAX_S) * 100);
   return (
     <div className="chat-rec" role="status" aria-live="polite">
@@ -256,7 +195,7 @@ function VoiceBar({ open, roomId, myId, onSent, children }: { open: boolean; roo
           <span className={`rec-dot ${phase === 'rec' ? 'on' : ''}`} aria-hidden="true" />
           <span>{phase === 'starting' ? tr('מפעיל מיקרופון...', 'Starting mic...') : phase === 'sending' ? tr('שולח...', 'Sending...') : tr('מקליט', 'Recording')}</span>
           <span className="num rec-time" dir="ltr">
-            {`0:${String(Math.floor(secs)).padStart(2, '0')}`} <small>/ {fmtDur(VOICE_MAX_S)}</small>
+            {recClock(secs)} <small>/ {fmtDur(VOICE_MAX_S)}</small>
           </span>
         </div>
         <div className="rec-track">

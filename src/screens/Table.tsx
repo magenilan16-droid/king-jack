@@ -39,6 +39,8 @@ import { Sheet, AsyncButton, toast } from '../components/ui';
 import { Settle } from '../components/Settle';
 import { ChipStack } from '../components/Chips';
 import { ChatSheet, useChatNotifier } from '../components/Chat';
+import { TableMic } from '../components/VoiceRecorder';
+import { canRecord } from '../lib/voice';
 import { InviteSheet } from '../components/InviteSheet';
 import { HandHistory } from '../components/HandHistory';
 import { NightSummary } from '../components/NightSummary';
@@ -345,6 +347,7 @@ export function Table({
       )}
 
       <FxLayer events={events} chatBubble={bubble} />
+      {me && canRecord() && <TableMic roomId={roomId} myId={myId} />}
       {kingCast && (
         <div className="kj-kingcast" key={kingCast.k} role="status">
           <Crown size={20} strokeWidth={2.2} />

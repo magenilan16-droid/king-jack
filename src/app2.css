@@ -2729,3 +2729,131 @@ label {
     animation: none;
   }
 }
+
+/* ---------- מיקרופון בשולחן: מחזיקים ומדברים ---------- */
+.tbl-mic {
+  position: fixed;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(201, 162, 74, 0.55);
+  background: rgba(6, 16, 12, 0.78);
+  color: var(--ivory);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.tbl-mic:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 3px;
+}
+.tbl-mic:active:not(.on) {
+  transform: scale(0.94);
+}
+.tbl-mic.on {
+  background: #c8382f;
+  border-color: #e5675e;
+  transform: scale(1.14);
+  animation: kjMicRing 1.3s ease-out infinite;
+}
+.tbl-mic.on.locked {
+  background: var(--brass);
+  border-color: var(--brass-hi);
+  color: #1d1408;
+  transform: none;
+  animation: none;
+}
+.tbl-mic.on.away {
+  background: #4a4f4c;
+  border-color: rgba(255, 255, 255, 0.25);
+  animation: none;
+}
+@keyframes kjMicRing {
+  0% {
+    box-shadow:
+      0 6px 16px rgba(0, 0, 0, 0.45),
+      0 0 0 0 rgba(200, 56, 47, 0.55);
+  }
+  100% {
+    box-shadow:
+      0 6px 16px rgba(0, 0, 0, 0.45),
+      0 0 0 16px rgba(200, 56, 47, 0);
+  }
+}
+.tbl-mic-pill {
+  position: fixed;
+  z-index: 50;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: calc(100vw - 90px);
+  min-height: 52px;
+  padding: 7px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line-mid);
+  background:
+    linear-gradient(90deg, rgba(201, 162, 74, 0.22), rgba(201, 162, 74, 0.22)) no-repeat 0 100% / var(--p, 0%) 3px,
+    rgba(8, 18, 14, 0.94);
+  color: var(--ivory);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+  animation: fade 0.15s;
+}
+[dir='rtl'] .tbl-mic-pill {
+  background-position:
+    100% 100%,
+    0 0;
+}
+.tbl-mic-pill.away .tmp-hint {
+  color: #f08a82;
+}
+.tmp-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tmp-time {
+  font-size: 18px;
+  line-height: 1.1;
+}
+.tmp-time small {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.tmp-hint {
+  font-size: 12.5px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tmp-x {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ivory);
+}
+/* הכפתור תמיד משמאל למיקרופון - הביטול בקצה השמאלי גם באנגלית */
+:root:not([dir='rtl']) .tmp-x {
+  order: -1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tbl-mic.on {
+    animation: none;
+  }
+}
