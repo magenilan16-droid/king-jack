@@ -36,7 +36,14 @@ export interface ChatMsg {
   vars?: Record<string, string>;
   delay?: number; // אחרי כמה זמן להציג את הבועה בשולחן
   fx?: BotFx; // אימוג׳י / זריקה שמגיעים עם השורה
+  voice?: string; // הודעה קולית: הנתיב של ההקלטה באחסון (<מזהה>/<זמן>-<אקראי>.webm)
+  dur?: number; // אורך ההקלטה בשניות
 }
+
+// הודעה קולית: עד 15 שניות, קובץ בתיקייה של השולח בלבד
+export const VOICE_MAX_S = 15;
+export const voicePathOk = (path: string, userId: string) =>
+  path.startsWith(userId + '/') && /^[0-9a-f-]{36}\/\d{10,14}-[a-z0-9]{6,12}\.(?:webm|m4a|ogg)$/.test(path);
 
 export type RoomMove =
   | { type: 'rebuy'; amount: number }
@@ -44,6 +51,7 @@ export type RoomMove =
   | { type: 'addBot' }
   | { type: 'removeBot'; botId: string }
   | { type: 'chat'; text: string }
+  | { type: 'voice'; path: string; dur: number }
   | { type: 'close' }
   | BJMove
   | HMove;
@@ -156,6 +164,18 @@ function actInner(f: Full, actorId: string, move: RoomMove, now: number): { effe
       const last = [...chat].reverse().find((c) => c.id === actorId);
       if (last && now - last.at < 1200) fail('לאט לאט 🙂');
       chat.push({ id: actorId, name: me.name, text, at: now });
+      if (chat.length > 40) chat.splice(0, chat.length - 40);
+      return { effects: [] };
+    }
+    case 'voice': {
+      if (!me) fail('אתה לא בשולחן');
+      const path = String(move.path || '');
+      if (!voicePathOk(path, actorId)) fail('ההקלטה לא תקינה');
+      const dur = Math.round(Math.min(VOICE_MAX_S + 1, Math.max(0.5, Number(move.dur) || 0)) * 10) / 10;
+      const chat = chatOf(f);
+      const last = [...chat].reverse().find((c) => c.id === actorId);
+      if (last && now - last.at < 1200) fail('לאט לאט 🙂');
+      chat.push({ id: actorId, name: me.name, text: '🎤', at: now, voice: path, dur });
       if (chat.length > 40) chat.splice(0, chat.length - 40);
       return { effects: [] };
     }

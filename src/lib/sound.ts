@@ -134,6 +134,14 @@ function load(c: AudioContext) {
   }
 }
 
+// הודעות קוליות מתנגנות דרך אותה שרשרת (עוצמה ראשית ומדחס), בלי הד החדר.
+// null כשהצלילים כבויים או שהדפדפן לא נותן צליל
+export function voiceOut(): { ctx: AudioContext; dest: AudioNode } | null {
+  const c = ac();
+  return c && out ? { ctx: c, dest: out } : null;
+}
+export const isMuted = () => muted;
+
 // דפדפנים בטלפון מאפשרים צליל רק אחרי נגיעה ראשונה במסך
 export function unlockAudio() {
   const once = () => {

@@ -5,6 +5,9 @@ import type { FxEvent } from '../lib/fx';
 import type { ChatMsg } from '../engine/room';
 import { chatText } from '../lib/display';
 import { getLang } from '../lib/i18n';
+import { Mic } from 'lucide-react';
+import { fmtDur, useVoicePlaying } from '../lib/voice';
+import { VoiceBars } from './Chat';
 
 function centerOf(pid: string): { x: number; y: number } | null {
   const el = document.querySelector(`[data-pid="${CSS.escape(pid)}"]`);
@@ -94,7 +97,16 @@ export function FxLayer({ events, chatBubble }: { events: FxEvent[]; chatBubble:
 function ChatBubble({ msg }: { msg: ChatMsg }) {
   const [pos, setPos] = useState(() => centerOf(msg.id));
   useEffect(() => setPos(centerOf(msg.id)), [msg]);
+  const playing = useVoicePlaying();
   if (!pos) return null;
+  if (msg.voice)
+    return (
+      <span className={`fx-chat fx-voice ${playing === msg.voice ? 'playing' : ''}`} style={{ left: Math.min(Math.max(pos.x, 90), window.innerWidth - 90), top: pos.y - 34 }}>
+        <Mic size={14} strokeWidth={2.4} aria-hidden="true" />
+        <VoiceBars />
+        <span className="num">{fmtDur(msg.dur)}</span>
+      </span>
+    );
   return (
     <span className="fx-chat" style={{ left: Math.min(Math.max(pos.x, 90), window.innerWidth - 90), top: pos.y - 34 }} dir="auto">
       {chatText(msg, getLang())}

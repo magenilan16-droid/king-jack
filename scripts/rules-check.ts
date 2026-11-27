@@ -179,5 +179,24 @@ const tryAct = (fn: () => unknown) => {
   check('omaha: hand record is marked as omaha', s.lastHand?.variant === 'omaha');
 }
 
+// 11. הודעה קולית: רק קובץ מהתיקייה של השולח, אורך מוגבל, ובקצב
+{
+  const U = '0694a457-d58b-4763-a307-94f6280cf984';
+  const O = 'aaaaaaaa-2222-3333-4444-555555555555';
+  const { full: f } = createBlackjack(P(U), { minBet: 10, maxBet: 100, buyIn: 500, dealerMode: 'house' });
+  joinBlackjack(f, P(O), 500);
+  const full = f as unknown as Parameters<typeof act>[0];
+  const chat = () => (f.pub as unknown as { chat: { voice?: string; dur?: number }[] }).chat;
+  check('voice: own file accepted', tryAct(() => act(full, U, { type: 'voice', path: `${U}/1795608581097-k3j9x2.webm`, dur: 7.34 } as never, 0)) === null);
+  check('voice: message carries path and rounded length', chat().at(-1)?.voice === `${U}/1795608581097-k3j9x2.webm` && chat().at(-1)?.dur === 7.3);
+  check('voice: someone else folder rejected', tryAct(() => act(full, O, { type: 'voice', path: `${U}/1795608581098-aaaaaa.webm`, dur: 3 } as never, 5000)) !== null);
+  check('voice: odd file name rejected', tryAct(() => act(full, U, { type: 'voice', path: `${U}/../x.webm`, dur: 3 } as never, 5000)) !== null);
+  check('voice: flood rejected', tryAct(() => act(full, U, { type: 'voice', path: `${U}/1795608581099-bbbbbb.m4a`, dur: 3 } as never, 300)) !== null);
+  act(full, U, { type: 'voice', path: `${U}/1795608581100-cccccc.m4a`, dur: 999 } as never, 9000);
+  check('voice: length capped', (chat().at(-1)?.dur ?? 99) <= 16);
+  const S = 'bbbbbbbb-2222-3333-4444-555555555555';
+  check('voice: spectator rejected', tryAct(() => act(full, S, { type: 'voice', path: `${S}/1795608581101-dddddd.webm`, dur: 2 } as never, 20000)) !== null);
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED');
 process.exit(fails ? 1 : 0);

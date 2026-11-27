@@ -1,13 +1,15 @@
 // הגדרות צליל: הפעלה/כיבוי ועוצמה (בתפריט השולחן ובפרופיל). בסוף הזזה מתנגן צליל ז׳טונים כדי לשמוע את העוצמה
 import type { CSSProperties } from 'react';
-import { Volume1, Volume2, VolumeX } from 'lucide-react';
+import { Mic, Volume1, Volume2, VolumeX } from 'lucide-react';
 import { useMuted, useVolume, sfx } from '../lib/sound';
+import { useVoiceAuto } from '../lib/voice';
 import { useI18n } from '../lib/i18n';
 
 export function SoundSettings() {
   const { tr } = useI18n();
   const [muted, setMuted] = useMuted();
   const [vol, setVol] = useVolume();
+  const [voiceAuto, setVoiceAuto] = useVoiceAuto();
   const pct = Math.round(vol * 100);
   const preview = () => sfx.chipStack();
   return (
@@ -38,6 +40,14 @@ export function SoundSettings() {
             onKeyUp={preview}
           />
         </div>
+      )}
+      {!muted && (
+        <label className="menu-item toggle">
+          <span className="mi">
+            <Mic size={19} /> {tr('הודעות קוליות מתנגנות לבד', 'Play voice messages automatically')}
+          </span>
+          <input type="checkbox" role="switch" checked={voiceAuto} onChange={(e) => setVoiceAuto(e.target.checked)} />
+        </label>
       )}
     </>
   );

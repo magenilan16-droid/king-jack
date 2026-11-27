@@ -2565,3 +2565,167 @@ label {
   margin: 0 0 8px;
   color: var(--text-2);
 }
+
+/* ---------- הודעות קוליות ---------- */
+.chat-mic {
+  min-width: 52px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  margin-top: 2px;
+  padding: 4px 6px;
+  padding-inline-end: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ivory);
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.chat-voice:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+}
+.chat-voice .cv-ic {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--brass);
+  color: #1d1408;
+}
+.chat-voice .num {
+  font-size: 15px;
+  color: var(--text-2);
+}
+.vbars {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+}
+.vbars i {
+  width: 3px;
+  height: calc(var(--h) * 100%);
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.72;
+}
+.playing .vbars i {
+  animation: kjVoice 0.9s ease-in-out infinite;
+  animation-delay: calc(var(--i) * -0.13s);
+}
+@keyframes kjVoice {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.chat-rec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 60px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--line-mid);
+  background: rgba(0, 0, 0, 0.28);
+}
+.chat-rec .rec-cancel {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  min-height: 48px;
+  padding: 0;
+}
+.rec-mid {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.rec-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14.5px;
+  color: var(--ivory);
+}
+.rec-time {
+  margin-inline-start: auto;
+  font-size: 18px;
+}
+.rec-time small {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.rec-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d9443a;
+  opacity: 0.4;
+}
+.rec-dot.on {
+  opacity: 1;
+  animation: kjRecDot 1.1s ease-in-out infinite;
+}
+@keyframes kjRecDot {
+  50% {
+    opacity: 0.3;
+  }
+}
+.rec-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.rec-track i {
+  display: block;
+  height: 100%;
+  background: var(--brass);
+  transition: width 0.2s linear;
+}
+.chat-rec .rec-send {
+  flex: none;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* בועה קולית בשולחן */
+.fx-chat.fx-voice {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.fx-voice .vbars {
+  height: 16px;
+}
+.fx-voice .num {
+  font-size: 14.5px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .playing .vbars i,
+  .rec-dot.on {
+    animation: none;
+  }
+}
