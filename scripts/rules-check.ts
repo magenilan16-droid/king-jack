@@ -198,5 +198,21 @@ const tryAct = (fn: () => unknown) => {
   check('voice: spectator rejected', tryAct(() => act(full, S, { type: 'voice', path: `${S}/1795608581101-dddddd.webm`, dur: 2 } as never, 20000)) !== null);
 }
 
+// 12. מישהו הראה קלפים - היד הבאה מחכה שכולם יספיקו לראות
+{
+  const { full: f } = createHoldem(P('A'), { sb: 5, bb: 10, buyIn: 1000 });
+  joinHoldem(f, P('B'), 1000);
+  joinHoldem(f, P('C'), 1000);
+  const full = f as unknown as Parameters<typeof act>[0];
+  const s = f.pub;
+  act(full, 'A', { type: 'start' }, 1000);
+  let t = 1000;
+  while (s.phase !== 'showdown') act(full, s.turnId!, { type: 'fold' }, (t += 10));
+  const winner = s.winners[0].id;
+  check('show: winner can show after everyone folded', tryAct(() => act(full, winner, { type: 'show' } as never, t + 5000)) === null);
+  check('show: next hand waits right after a show', tryAct(() => act(full, 'A', { type: 'next' } as never, t + 6000)) !== null);
+  check('show: next hand allowed after everyone saw', tryAct(() => act(full, 'A', { type: 'next' } as never, t + 9000)) === null);
+}
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED');
 process.exit(fails ? 1 : 0);

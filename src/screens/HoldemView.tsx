@@ -324,18 +324,31 @@ export function HoldemView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.phase, s.handNo, lang]);
 
-  // המארח מתחיל את היד הבאה אוטומטית
-  useEffect(() => {
-    if (!me || !showdown) return;
-    const show = s.runout && s.runout.hand === s.handNo ? runoutMs(s.runout.from) : 0;
-    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), show + (isHost ? 6500 : 9500 + Math.random() * 1500));
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHost, !!me, s.phase, s.handNo]);
-
   // "תראה!" - מי שלקח קופה בלי שראו לו קלפים, החברים יכולים לדרוש לראות
   const foldWinner = showdown && s.winners.length === 1 && s.winners[0].cat < 0 ? s.players.find((p) => p.id === s.winners[0].id && !p.shown) : undefined;
   const req = showReq && showReq.hand === s.handNo ? showReq : null;
+  // ביקשו מהזוכה להראות והוא עוד לא החליט - נותנים לו זמן
+  const showPending = !!foldWinner && !!req && req.to === foldWinner.id;
+  const shownCount = showdown ? s.players.filter((p) => p.shown).length : 0;
+
+  // המארח מתחיל את היד הבאה אוטומטית. מישהו הראה קלפים - הספירה מתחילה מחדש, כדי שכולם יספיקו לראות
+  useEffect(() => {
+    if (!me || !showdown) return;
+    const show = s.runout && s.runout.hand === s.handNo ? runoutMs(s.runout.from) : 0;
+    const wait = showPending ? 14000 : 8000;
+    const t = setTimeout(() => act({ type: 'next' }).catch(() => {}), show + (isHost ? wait : wait + 3000 + Math.random() * 1500));
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHost, !!me, s.phase, s.handNo, shownCount, showPending]);
+
+  // "יד הבאה" ידני - רק אחרי כמה שניות, שלא ידלגו על הרגע של "להראות?"
+  const [nextReady, setNextReady] = useState(false);
+  useEffect(() => {
+    setNextReady(false);
+    if (!showResult) return;
+    const t = setTimeout(() => setNextReady(true), 4500);
+    return () => clearTimeout(t);
+  }, [showResult, s.handNo, shownCount]);
   const canAskShow = !!me && !!foldWinner && foldWinner.id !== myId && !foldWinner.isBot;
   const iAsked = !!req && req.to === foldWinner?.id && req.from.includes(myId);
   const askedMe = req && req.to === myId ? req.from.length : 0;
@@ -613,8 +626,12 @@ export function HoldemView({
         {showResult && me && (
           <div className="pk-btnrow">
             {hole.length >= 2 && !me.shown && (
-              <AsyncButton className={`pk-btn ${askedMe ? 'gold kj-asked' : 'ghost'}`} onClick={() => act({ type: 'show' })}>
-                {askedMe ? tr(`להראות (${askedMe} ביקשו)`, `Show (${askedMe} asked)`) : tr('הראה קלפים', 'Show cards')}
+              <AsyncButton className={`pk-btn ${askedMe ? 'gold kj-asked' : foldWinner?.id === myId ? 'gold' : 'ghost'}`} onClick={() => act({ type: 'show' })}>
+                {askedMe
+                  ? tr(`להראות (${askedMe} ביקשו)`, `Show (${askedMe} asked)`)
+                  : foldWinner?.id === myId
+                    ? tr('להראות להם?', 'Show them?')
+                    : tr('הראה קלפים', 'Show cards')}
               </AsyncButton>
             )}
             {canAskShow && (
@@ -629,7 +646,7 @@ export function HoldemView({
                 <Eye size={18} /> {iAsked ? tr('ביקשת', 'Asked') : tr('תראה!', 'Show!')}
               </button>
             )}
-            <AsyncButton className="pk-btn gold" onClick={() => act({ type: 'next' })}>
+            <AsyncButton className={`pk-btn ${foldWinner?.id === myId && !me.shown ? 'ghost' : 'gold'} ${nextReady ? '' : 'kj-wait'}`} disabled={!nextReady} onClick={() => act({ type: 'next' })}>
               {tr('יד הבאה', 'Next hand')}
             </AsyncButton>
           </div>
