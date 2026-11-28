@@ -82,7 +82,8 @@ export function Toaster() {
     pushToast = (t) => {
       const id = Date.now() + Math.random();
       setItems((old) => [...old.slice(-2), { ...t, id }]);
-      setTimeout(() => setItems((old) => old.filter((x) => x.id !== id)), 3200);
+      // הודעה ארוכה נשארת יותר זמן, כדי שיספיקו לקרוא
+      setTimeout(() => setItems((old) => old.filter((x) => x.id !== id)), Math.min(8000, Math.max(3200, 1500 + t.text.length * 50)));
     };
     return () => {
       pushToast = null;

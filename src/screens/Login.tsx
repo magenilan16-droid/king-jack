@@ -35,9 +35,26 @@ export function Login({ onInstall }: { onInstall: () => void }) {
     setBusy(true);
     try {
       if (mode === 'login') await login(name, pw);
-      else await register(name, pw, avatar);
+      else {
+        // כבר רשום ובטעות לחץ "הרשמה" במקום "כניסה"? אם הסיסמה נכונה - פשוט נכנסים
+        const existing = await login(name, pw).then(
+          () => true,
+          () => false,
+        );
+        if (!existing) await register(name, pw, avatar);
+      }
     } catch (err) {
-      toast((err as Error).message, 'error');
+      const msg = (err as Error).message;
+      const taken = mode === 'register' && /תפוס|taken/i.test(msg);
+      toast(
+        taken
+          ? tr(
+              `השם "${name.trim()}" כבר רשום. אם זה אתה, הסיסמה לא נכונה (מנהל יכול לאפס לך אותה). אם זה לא אתה, בחר שם אחר.`,
+              `The name "${name.trim()}" is already registered. If it's you, the password is wrong (an admin can reset it). If not, pick another name.`,
+            )
+          : msg,
+        'error',
+      );
     } finally {
       setBusy(false);
     }
