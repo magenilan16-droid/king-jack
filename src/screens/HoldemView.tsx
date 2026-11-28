@@ -68,6 +68,7 @@ export function HoldemView({
   kingId,
   showReq,
   askShow,
+  feltLabel,
 }: {
   s: HState;
   roomId: string;
@@ -82,6 +83,7 @@ export function HoldemView({
   kingId?: string | null;
   showReq?: { hand: number; to: string; from: string[] } | null;
   askShow?: (to: string) => void;
+  feltLabel?: string; // מה כתוב על הבד (בשולחן של ג׳ינג׳י: ח״י בדצמבר)
 }) {
   const { tr, lang } = useI18n();
   const me = s.players.find((p) => p.id === myId);
@@ -370,7 +372,9 @@ export function HoldemView({
       <div className="pk-stage">
         <div className="pk-table">
           <div className="pk-felt">
-            <span className="pk-logo" translate="no">KING JACK</span>
+            <span className="pk-logo" translate="no">
+              {feltLabel ?? 'KING JACK'}
+            </span>
           </div>
         </div>
 

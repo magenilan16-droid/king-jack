@@ -3293,3 +3293,111 @@ label {
   font-size: 15px;
   line-height: 1.45;
 }
+
+/* ---------- ח״י בדצמבר: לזכרו של רותם לוי, ג׳ינג׳י (כתום) ---------- */
+.hai-card {
+  --ginger: #e8843a;
+  --ginger-hi: #f4a868;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(232, 132, 58, 0.45);
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(232, 132, 58, 0.2), transparent 60%),
+    var(--surface);
+  color: var(--ivory);
+}
+.hai-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hai-head h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ginger-hi);
+}
+.hai-heart {
+  color: var(--ginger);
+  flex-shrink: 0;
+}
+.hai-text {
+  margin: 8px 0 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  text-wrap: balance;
+}
+.hai-btn {
+  background: var(--ginger);
+  color: #1f0f04;
+  border: none;
+  font-weight: 700;
+}
+.hai-btn:active {
+  transform: scale(0.98);
+}
+.hai-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.hai-holder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ginger-hi);
+}
+.hai-cup {
+  display: inline-flex;
+  vertical-align: -2px;
+  margin-inline-start: 6px;
+  color: #f4a868;
+}
+.hai-cup-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(232, 132, 58, 0.45);
+  background: rgba(232, 132, 58, 0.08);
+}
+.hai-cup-card b {
+  font-size: 15px;
+  color: #f4a868;
+}
+.hai-cup-card .sub {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.hai-cup-ic {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #f4a868;
+  background: rgba(232, 132, 58, 0.16);
+}
+
+/* השולחן של ג׳ינג׳י: בד כתום עמוק, פס כתום וכיתוב ח״י בדצמבר */
+.table-screen.ginger .pk-felt {
+  background:
+    var(--noise),
+    radial-gradient(70% 55% at 50% 42%, #b4612a 0%, #8a4218 55%, #4e220b 100%);
+  box-shadow:
+    0 0 0 2px #e8843a,
+    0 0 0 3px rgba(0, 0, 0, 0.5),
+    inset 0 0 40px rgba(0, 0, 0, 0.55);
+}
+.table-screen.ginger .pk-felt::after {
+  border-color: rgba(244, 168, 104, 0.28);
+}
+.table-screen.ginger .pk-logo {
+  color: rgba(255, 214, 170, 0.34);
+  letter-spacing: 2px;
+  font-size: 17px;
+}

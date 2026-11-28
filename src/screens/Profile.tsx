@@ -1,6 +1,7 @@
 // מסך פרופיל והגדרות
-import { useRef, useState } from 'react';
-import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, ChevronLeft, ChevronRight, Camera, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Bell, BellRing, Download, Lightbulb, LogOut, Shield, ChevronLeft, ChevronRight, Camera, X, Trophy } from 'lucide-react';
+import { currentHaiCup, type HaiCup } from '../lib/december';
 import { supabase, type Profile as P } from '../lib/supabase';
 import { allThemes, type Theme, type ThemeId } from '../lib/themes';
 import { AvatarPicker, ThemePicker } from '../components/Pickers';
@@ -35,6 +36,11 @@ export function ProfileScreen({
   onProfileChange: () => void;
 }) {
   const { tr, lang, setLang } = useI18n();
+  // גביע ח״י בדצמבר (לזכרו של ג׳ינג׳י) - אם הוא אצלי
+  const [cup, setCup] = useState<HaiCup | null>(null);
+  useEffect(() => {
+    void currentHaiCup().then(setCup);
+  }, []);
   const push = usePushSetup(onInstall);
   const Chev = lang === 'he' ? ChevronLeft : ChevronRight;
   const fileRef = useRef<HTMLInputElement>(null);
@@ -95,6 +101,17 @@ export function ProfileScreen({
         </div>
 
         <div className="list-label">{tr('ההישגים שלי', 'My achievements')}</div>
+        {cup?.userId === profile.id && (
+          <div className="hai-cup-card">
+            <span className="hai-cup-ic">
+              <Trophy size={22} aria-hidden="true" />
+            </span>
+            <div className="grow">
+              <b>{tr(`גביע ח״י בדצמבר ${cup.year}`, `Chai of December cup ${cup.year}`)}</b>
+              <div className="sub">{tr('לזכרו של ג׳ינג׳י. שלך עד ח״י בדצמבר הבא', "In Ginger's memory. Yours until next December 18")}</div>
+            </div>
+          </div>
+        )}
         <div className="card-group">
           <Achievements userId={profile.id} />
         </div>

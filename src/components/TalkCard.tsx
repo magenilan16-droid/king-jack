@@ -12,7 +12,7 @@ type Row = { user_id: string; answer: Answer };
 const FRESH_MS = 12 * 3600 * 1000;
 const ANSWERS: Answer[] = ['in', 'maybe', 'no'];
 
-export function TalkCard({ myId }: { myId: string }) {
+export function TalkCard({ myId, december }: { myId: string; december?: boolean }) {
   const { tr, lang } = useI18n();
   const [talk, setTalk] = useState<Talk | null | undefined>(undefined);
   const [answers, setAnswers] = useState<Row[]>([]);
@@ -109,8 +109,10 @@ export function TalkCard({ myId }: { myId: string }) {
             <MessagesSquare size={19} />
           </span>
           <div className="grow">
-            <b>{tr('יש דיבור?', 'Anything on?')}</b>
-            <div className="sub">{tr('שואלים את כל החבורה אם יש ישיבה הערב', 'Ask the whole gang if there is a hangout tonight')}</div>
+            <b>{december ? tr('דצמבר, החודש של הועד', "December, the committee's month") : tr('יש דיבור?', 'Anything on?')}</b>
+            <div className="sub">
+              {december ? tr('יש דיבור? שואלים את כל החבורה אם יש ישיבה הערב', 'Anything on? Ask the whole gang about a hangout tonight') : tr('שואלים את כל החבורה אם יש ישיבה הערב', 'Ask the whole gang if there is a hangout tonight')}
+            </div>
           </div>
           <Chev size={18} className="banner-chev" />
         </button>

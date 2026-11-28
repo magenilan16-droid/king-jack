@@ -37,6 +37,7 @@ import { SoundSettings } from '../components/SoundSettings';
 import { useRoomFx, THROWABLES, EMOTES } from '../lib/fx';
 import { canRebuyNow, rebuysLeft } from '../engine/room';
 import { isGranny } from '../engine/common';
+import { isGingerTable } from '../lib/december';
 import { Sheet, AsyncButton, toast } from '../components/ui';
 import { Settle } from '../components/Settle';
 import { ChipStack } from '../components/Chips';
@@ -277,8 +278,10 @@ export function Table({
     setTarget(id);
   };
 
+  // השולחן של ג׳ינג׳י (ח״י בדצמבר) - בד כתום לזכרו
+  const ginger = isGingerTable(room.name);
   return (
-    <div className={`screen table-screen theme-${theme.id}`}>
+    <div className={`screen table-screen theme-${theme.id} ${ginger ? 'ginger' : ''}`}>
       <header className="topbar table-top">
         <button className="icon-btn" onClick={onExit} aria-label={tr('ללובי', 'Lobby')}>
           <BackIcon size={22} />
@@ -347,6 +350,7 @@ export function Table({
             kingId={king}
             showReq={showReq}
             askShow={(to) => send({ kind: 'showme', to, hand: hd.handNo })}
+            feltLabel={ginger ? tr('ח״י בדצמבר', 'December 18') : undefined}
           />
         ) : null}
       </main>

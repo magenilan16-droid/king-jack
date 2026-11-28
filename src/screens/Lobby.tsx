@@ -11,6 +11,8 @@ import { Sheet, AsyncButton, toast } from '../components/ui';
 import { CreateSheet, type GamePick } from './CreateSheet';
 import { TalkCard } from '../components/TalkCard';
 import { netsByPerson, owedTotals } from '../lib/debtNets';
+import { HaiCard } from '../components/HaiCard';
+import { GINGER_TABLE, isDecember, isGingerTable, isHaiNight } from '../lib/december';
 import type { RoomState } from '../lib/useRoom';
 
 interface LobbyRoom {
@@ -42,6 +44,8 @@ export function Lobby({
   const [rooms, setRooms] = useState<LobbyRoom[] | null>(null);
   const [sheet, setSheet] = useState<null | 'create' | 'join'>(null);
   const [createType, setCreateType] = useState<GamePick>('holdem');
+  // שם מוכן לשולחן חדש (בח״י בדצמבר: השולחן של ג׳ינג׳י)
+  const [presetName, setPresetName] = useState<string | undefined>(undefined);
   const [joinCode, setJoinCode] = useState('');
   const [joinRoom, setJoinRoom] = useState<LobbyRoom | null>(null);
   const push = usePushSetup(onInstall);
@@ -133,6 +137,9 @@ export function Lobby({
       : 'minBet' in r.state.settings
         ? { l: tr('הימור', 'Bet'), v: `${r.state.settings.minBet}-${r.state.settings.maxBet}` }
         : { l: '', v: '' };
+  const december = isDecember();
+  const haiNight = isHaiNight();
+  const gingerRoom = rooms?.find((r) => isGingerTable(r.name));
   const debtNet = debt ? debt.owed - debt.owe : 0;
   const debtSub = !debt
     ? ''
@@ -144,6 +151,7 @@ export function Lobby({
           ? tr('לקבל', 'To collect')
           : tr('הכל סגור', 'All settled');
   const openCreate = (t: GamePick) => {
+    setPresetName(undefined);
     setCreateType(t);
     setSheet('create');
   };
@@ -188,6 +196,24 @@ export function Lobby({
           </div>
         </section>
 
+        {/* דצמבר - החודש של הועד. בח״י בדצמבר: כרטיס כתום לזכרו של ג׳ינג׳י */}
+        {december && (
+          <>
+            {haiNight && (
+              <HaiCard
+                gingerOpen={!!gingerRoom}
+                onOpen={() => {
+                  if (gingerRoom) return gingerRoom.state.players.some((p) => p.id === profile.id) ? openTable(gingerRoom.id) : openJoinByCode(gingerRoom.code);
+                  setCreateType('holdem');
+                  setPresetName(GINGER_TABLE);
+                  setSheet('create');
+                }}
+              />
+            )}
+            <TalkCard myId={profile.id} december />
+          </>
+        )}
+
         {!isStandalone() && (
           <button className="banner" onClick={onInstall}>
             <span className="banner-ic">
@@ -222,8 +248,8 @@ export function Lobby({
         )}
         {push.sheet}
 
-        {/* יש דיבור? - שואלים את כל החבורה אם יש ישיבה הערב */}
-        <TalkCard myId={profile.id} />
+        {/* יש דיבור? - שואלים את כל החבורה אם יש ישיבה הערב (בדצמבר הוא למעלה) */}
+        {!december && <TalkCard myId={profile.id} />}
 
         {/* פתיחת שולחן */}
         <div className="section-head">
@@ -399,7 +425,7 @@ export function Lobby({
         )}
       </Sheet>
 
-      <CreateSheet open={sheet === 'create'} type={createType} setType={setCreateType} onClose={() => setSheet(null)} onCreated={openTable} myName={profile.name} />
+      <CreateSheet open={sheet === 'create'} type={createType} setType={setCreateType} onClose={() => setSheet(null)} onCreated={openTable} myName={profile.name} presetName={presetName} />
 
       <Sheet
         open={sheet === 'join'}

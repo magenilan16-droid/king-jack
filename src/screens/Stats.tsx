@@ -1,6 +1,7 @@
 // סטטיסטיקה: טבלת דירוג, סטטיסטיקה אישית והיסטוריית ערבים
 import { useEffect, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Trophy } from 'lucide-react';
+import { currentHaiCup, type HaiCup } from '../lib/december';
 import { supabase, type Profile } from '../lib/supabase';
 import { signed } from '../lib/balances';
 import { useI18n, count } from '../lib/i18n';
@@ -52,6 +53,11 @@ export function Stats({ profile }: { profile: Profile; onBack?: () => void }) {
   const [nights, setNights] = useState<(RoomRow & { closed_at?: string })[] | null>(null);
   const [openNight, setOpenNight] = useState<{ room: RoomRow; ledger: LedgerRow[] } | null>(null);
   const Chev = lang === 'he' ? ChevronLeft : ChevronRight;
+  // גביע ח״י בדצמבר - מסומן ליד מי שמחזיק בו עד השנה הבאה
+  const [cup, setCup] = useState<HaiCup | null>(null);
+  useEffect(() => {
+    void currentHaiCup().then(setCup);
+  }, []);
 
   useEffect(() => {
     const since = period === 'month' ? new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString() : null;
@@ -135,7 +141,14 @@ export function Stats({ profile }: { profile: Profile; onBack?: () => void }) {
                     <span className={`rank ${i < 3 ? `r${i + 1}` : ''}`}>{i + 1}</span>
                     <Avatar name={b.name} emoji={b.avatar} size={36} />
                     <div className="grow">
-                      <b dir="auto">{b.name}</b>
+                      <b dir="auto">
+                        {b.name}
+                        {cup?.userId === b.user_id && (
+                          <span className="hai-cup" title={tr(`גביע ח״י בדצמבר ${cup.year}`, `Chai of December cup ${cup.year}`)} aria-label={tr(`מחזיק בגביע ח״י בדצמבר ${cup.year}`, `Holds the Chai of December cup ${cup.year}`)}>
+                            <Trophy size={14} aria-hidden="true" />
+                          </span>
+                        )}
+                      </b>
                       <div className="sub">
                         {count(Number(b.games), 'ערב אחד', 'ערבים', '1 night', 'nights')}
                         {tr(

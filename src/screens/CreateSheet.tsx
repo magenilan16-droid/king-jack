@@ -57,6 +57,7 @@ export function CreateSheet({
   onClose,
   onCreated,
   myName,
+  presetName,
 }: {
   open: boolean;
   type: GamePick;
@@ -64,10 +65,17 @@ export function CreateSheet({
   onClose: () => void;
   onCreated: (id: string) => void;
   myName: string;
+  presetName?: string; // שם קבוע מראש (למשל "השולחן של ג׳ינג׳י" בח״י בדצמבר)
 }) {
   const { tr } = useI18n();
   const [money, setMoney] = useState<'real' | 'demo'>('real');
   const [name, setName] = useState('');
+  // נפתח עם שם מוכן מראש - ממלאים אותו בכל פתיחה
+  const [lastPreset, setLastPreset] = useState<string | undefined>(undefined);
+  if (open && presetName !== lastPreset) {
+    setLastPreset(presetName);
+    setName(presetName ?? '');
+  }
   const [buyIn, setBuyIn] = useState(200);
   const [bb, setBb] = useState(2);
   const [blindUp, setBlindUp] = useState(0);
