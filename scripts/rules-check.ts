@@ -4,6 +4,7 @@ import { createHoldem, joinHoldem, actHoldem, leaveHoldem, potSize, potLimitTo, 
 import { bestHand, bestOmaha } from '../src/engine/handEval.ts';
 import { createBlackjack, joinBlackjack, actBlackjack, betWindowMs, type BJFull } from '../src/engine/blackjack.ts';
 import { act } from '../src/engine/room.ts';
+import { BOT_LINES } from '../src/engine/botTalk.ts';
 
 const P = (id: string) => ({ id, name: id, avatar: '', isBot: false, chips: 0 });
 let fails = 0;
@@ -212,6 +213,20 @@ const tryAct = (fn: () => unknown) => {
   check('show: winner can show after everyone folded', tryAct(() => act(full, winner, { type: 'show' } as never, t + 5000)) === null);
   check('show: next hand waits right after a show', tryAct(() => act(full, 'A', { type: 'next' } as never, t + 6000)) !== null);
   check('show: next hand allowed after everyone saw', tryAct(() => act(full, 'A', { type: 'next' } as never, t + 9000)) === null);
+}
+
+// 13. סבתא של תמיר: רק המארח מושיב, רק אחת בשולחן, ויש לה משפטים בשתי השפות
+{
+  const { full: f } = createHoldem(P('A'), { sb: 5, bb: 10, buyIn: 1000 });
+  joinHoldem(f, P('B'), 1000);
+  const full = f as unknown as Parameters<typeof act>[0];
+  check('granny: guest cannot seat her', tryAct(() => act(full, 'B', { type: 'addBot', granny: true } as never, 0)) !== null);
+  check('granny: host seats her', tryAct(() => act(full, 'A', { type: 'addBot', granny: true } as never, 0)) === null);
+  const g = f.pub.players.find((p) => p.id.startsWith('bot-granny'));
+  check('granny: she is at the table', !!g && g.name === 'סבתא של תמיר' && g.isBot);
+  check('granny: only one grandma', tryAct(() => act(full, 'A', { type: 'addBot', granny: true } as never, 0)) !== null);
+  const bad = Object.entries(BOT_LINES).filter(([k, v]) => k.startsWith('g_') && (v.he.length !== v.en.length || !BOT_LINES[k.slice(2)]));
+  check('granny: every line has Hebrew + English and a matching moment', bad.length === 0, bad.map(([k]) => k).join(','));
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED');

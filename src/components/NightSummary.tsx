@@ -1,6 +1,6 @@
 // סיכום הערב: המלך, הדירוג, הקופה הגדולה, היד הכי חזקה - ותמונה לשיתוף בקבוצת הוואטסאפ
-import { useEffect, useState } from 'react';
-import { Crown, Share2 } from 'lucide-react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { Clover, Crosshair, Crown, Eye, Flame, HandCoins, HeartCrack, RockingChair, Share2, Split, VenetianMask, type LucideIcon } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { computeLines, fmt, signed } from '../lib/balances';
 import { useI18n, count } from '../lib/i18n';
@@ -11,6 +11,33 @@ import type { LedgerRow, RoomRow } from '../lib/useRoom';
 import { Avatar } from './Avatar';
 import { Card } from './Card';
 import { toast } from './ui';
+import type { AwardId } from '../lib/awards';
+import '../awards.css';
+
+const AWARD_ICONS: Record<AwardId, LucideIcon> = {
+  atm: HandCoins,
+  grandma: RockingChair,
+  cowboy: Crosshair,
+  bluffer: VenetianMask,
+  heartbreak: HeartCrack,
+  lucky: Clover,
+  curious: Eye,
+  burner: Flame,
+  splitter: Split,
+};
+
+// המספרים בשורת ההסבר - בגופן המספרים
+function withNums(s: string): ReactNode[] {
+  return s.split(/(\d[\d,.]*)/).map((part, i) =>
+    i % 2 ? (
+      <b key={i} className="num">
+        {part}
+      </b>
+    ) : (
+      part
+    ),
+  );
+}
 
 export function NightSummary({ room, ledger, refreshKey }: { room: RoomRow; ledger: LedgerRow[]; refreshKey?: number | string }) {
   const { tr, lang } = useI18n();
@@ -37,9 +64,11 @@ export function NightSummary({ room, ledger, refreshKey }: { room: RoomRow; ledg
       .then(({ data }) => setNames(Object.fromEntries((data ?? []).map((p) => [p.id, { name: p.name, avatar: p.avatar }]))));
   }, [idsKey]);
 
-  const st: NightStats | null = rows ? nightStats(computeLines(room, ledger, names).lines, rows, lang) : null;
+  const st: NightStats | null = rows ? nightStats(computeLines(room, ledger, names).lines, rows, lang, room.state.buyCount) : null;
   // התמונה מוכנה מראש - כדי שהשיתוף ייפתח מיד בלחיצה (אייפון דורש את זה)
-  const stKey = st ? JSON.stringify([st.lines.map((l) => [l.name, l.net]), st.hands, st.biggest, st.best?.cat, lang]) : '';
+  const stKey = st
+    ? JSON.stringify([st.lines.map((l) => [l.name, l.net]), st.hands, st.biggest, st.best?.cat, st.awards.map((a) => [a.id, a.name, a.line]), lang])
+    : '';
   useEffect(() => {
     if (!st) return;
     let live = true;
@@ -122,6 +151,35 @@ export function NightSummary({ room, ledger, refreshKey }: { room: RoomRow; ledg
             </li>
           ))}
         </ol>
+      )}
+
+      {st.awards.length > 0 && (
+        <section className="aw" aria-labelledby="aw-title">
+          <div className="aw-head">
+            <h3 id="aw-title">{tr('פרסי השפלה', 'Roast awards')}</h3>
+            <span>{tr('הכול באהבה', 'All with love')}</span>
+          </div>
+          <ul className="aw-list">
+            {st.awards.map((a, i) => {
+              const Icon = AWARD_ICONS[a.id];
+              return (
+                <li key={a.id} style={{ '--i': i } as CSSProperties}>
+                  <Avatar name={a.name} emoji={names[a.playerId]?.avatar ?? a.avatar} bot={a.isBot} size={44} />
+                  <span className="aw-txt">
+                    <b className="aw-title">
+                      <Icon size={15} strokeWidth={2.2} aria-hidden="true" />
+                      {a.title}
+                    </b>
+                    <span className="aw-name">
+                      <bdi>{a.name}</bdi>
+                    </span>
+                    <span className="aw-why">{withNums(a.line)}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
       )}
 
       <div className="ns-facts">

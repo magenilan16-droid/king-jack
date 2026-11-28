@@ -5,18 +5,21 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { sfx, seatPan } from './sound';
 import { vibrate } from './prefs';
+import { clipPathOk, playClip } from './sounds';
 
 export type FxEvent =
   | { kind: 'throw'; id: string; from: string; to: string; item: string }
   | { kind: 'emote'; id: string; from: string; emoji: string }
   | { kind: 'nudge'; id: string; from: string; to: string }
-  | { kind: 'showme'; id: string; from: string; to: string; hand: number };
+  | { kind: 'showme'; id: string; from: string; to: string; hand: number }
+  | { kind: 'sound'; id: string; from: string; path: string; label: string };
 
 type FxInput =
   | { kind: 'throw'; to: string; item: string }
   | { kind: 'emote'; emoji: string }
   | { kind: 'nudge'; to: string }
-  | { kind: 'showme'; to: string; hand: number };
+  | { kind: 'showme'; to: string; hand: number }
+  | { kind: 'sound'; path: string; label: string };
 
 export const THROWABLES = ['🍅', '🍺', '🌹', '💩', '🥚', '🔥', '💋', '🎂', '💸', '🧻'];
 export const EMOTES = ['😂', '😎', '🤯', '😭', '🤑', '🙏', '👏', '🔥', '🤡', '😴', '🫡', '🥶'];
@@ -25,8 +28,17 @@ export function useRoomFx(roomId: string, myId: string) {
   const [events, setEvents] = useState<FxEvent[]>([]);
   const chRef = useRef<RealtimeChannel | null>(null);
 
+  const lastSound = useRef(new Map<string, number>());
   const add = useCallback(
     (e: FxEvent) => {
+      // צליל מהלוח: רק קבצים מהדלי שלנו, ולא יותר מאחד בשנייה מכל חבר
+      if (e.kind === 'sound') {
+        const now = Date.now();
+        if (!clipPathOk(e.path) || now - (lastSound.current.get(e.from) ?? 0) < 900) return;
+        lastSound.current.set(e.from, now);
+        e = { ...e, label: String(e.label ?? '').slice(0, 24) };
+        void playClip(e.path);
+      }
       setEvents((old) => [...old.slice(-15), e]);
       setTimeout(() => setEvents((old) => old.filter((x) => x.id !== e.id)), 2800);
       if (e.kind === 'throw') {

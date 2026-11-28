@@ -20,6 +20,7 @@ import {
   Crown,
   X,
   Sparkles,
+  Armchair,
 } from 'lucide-react';
 import { useRoom } from '../lib/useRoom';
 import { gameCall, type Profile } from '../lib/supabase';
@@ -35,14 +36,16 @@ import { sfx, seatPan } from '../lib/sound';
 import { SoundSettings } from '../components/SoundSettings';
 import { useRoomFx, THROWABLES, EMOTES } from '../lib/fx';
 import { canRebuyNow, rebuysLeft } from '../engine/room';
+import { isGranny } from '../engine/common';
 import { Sheet, AsyncButton, toast } from '../components/ui';
 import { Settle } from '../components/Settle';
 import { ChipStack } from '../components/Chips';
 import { ChatSheet, useChatNotifier } from '../components/Chat';
 import { TableMic } from '../components/VoiceRecorder';
-import { canRecord } from '../lib/voice';
 import { TableCall } from '../components/TableCall';
-import { useTableCall } from '../lib/call';
+import { useCall, useTableCall } from '../lib/call';
+import { SoundBoard, NewSoundSheet } from '../components/SoundBoard';
+import { loadClips } from '../lib/sounds';
 import { InviteSheet } from '../components/InviteSheet';
 import { HandHistory } from '../components/HandHistory';
 import { NightSummary } from '../components/NightSummary';
@@ -92,7 +95,7 @@ export function Table({
   const myId = profile.id;
   const { room, hole, ledger, refresh, connected } = useRoom(roomId, myId);
   const { events, send, inject } = useRoomFx(roomId, myId);
-  const [sheet, setSheet] = useState<null | 'menu' | 'settle' | 'chat' | 'invite' | 'rebuy' | 'join' | 'history' | 'emote' | 'night'>(null);
+  const [sheet, setSheet] = useState<null | 'menu' | 'settle' | 'chat' | 'invite' | 'rebuy' | 'join' | 'history' | 'emote' | 'night' | 'newsound'>(null);
   const [target, setTarget] = useState<string | null>(null);
   const [quip, setQuip] = useState(() => pick(theme.quips));
   const [closedTab, setClosedTab] = useState<'night' | 'settle' | 'hands'>('night');
@@ -101,6 +104,11 @@ export function Table({
   // שיחה חיה בשולחן - זמינה למי שיושב
   const seated = !!s?.players.some((p) => p.id === myId) && room?.status === 'open';
   useTableCall(roomId, myId, seated);
+  const call = useCall();
+  // לוח הצלילים נטען מראש - כדי שצליל של חבר יישמע מיד
+  useEffect(() => {
+    if (seated) void loadClips();
+  }, [seated]);
   const { unread, bubble } = useChatNotifier(s ? chat : undefined, myId, sheet === 'chat', (m) => {
     if (m.fx?.kind === 'emote') inject({ kind: 'emote', from: m.id, emoji: m.fx.emoji });
     else if (m.fx?.kind === 'throw') inject({ kind: 'throw', from: m.id, to: m.fx.to, item: m.fx.item });
@@ -352,7 +360,8 @@ export function Table({
       )}
 
       <FxLayer events={events} chatBubble={bubble} />
-      {me && canRecord() && <TableMic roomId={roomId} myId={myId} />}
+      {/* כפתור המיקרופון בפינה - רק בזמן שיחה (להשתקה). הודעות קוליות נשלחות מהצ׳אט */}
+      {me && call.status === 'on' && <TableMic roomId={roomId} myId={myId} />}
       {me && (
         <TableCall
           myId={myId}
@@ -448,7 +457,16 @@ export function Table({
           ))}
         </div>
         <p className="hint center">{tr('לחיצה על חבר בשולחן פותחת זריקה וזירוז.', 'Tap a friend at the table to throw something or nudge.')}</p>
+        <SoundBoard
+          myId={myId}
+          onPlay={(c) => {
+            send({ kind: 'sound', path: c.path, label: c.label });
+            setSheet(null);
+          }}
+          onAdd={() => setSheet('newsound')}
+        />
       </Sheet>
+      <NewSoundSheet open={sheet === 'newsound'} onClose={() => setSheet('emote')} myId={myId} />
 
       {/* תפריט */}
       <Sheet open={sheet === 'menu'} onClose={() => setSheet(null)} title={tr('תפריט שולחן', 'Table menu')}>
@@ -520,6 +538,14 @@ export function Table({
                   <Bot size={19} /> {tr('הוספת בוט', 'Add a bot')}
                 </span>
               </AsyncButton>
+              {!s.players.some((p) => isGranny(p.id)) && (
+                <AsyncButton className="menu-item" onClick={() => act({ type: 'addBot', granny: true })}>
+                  <span className="mi">
+                    <Armchair size={19} /> {tr('להושיב את סבתא של תמיר', "Seat Tamir's Grandma")}
+                  </span>
+                  <span className="sub">{tr('זהירה, מדברת הרבה, ולפעמים משתגעת', 'Careful, chatty, and sometimes goes wild')}</span>
+                </AsyncButton>
+              )}
               {bots.map((b) => (
                 <AsyncButton key={b.id} className="menu-item" onClick={() => act({ type: 'removeBot', botId: b.id })}>
                   <span className="mi">

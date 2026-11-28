@@ -65,6 +65,16 @@ function round(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
   ctx.roundRect(x, y, w, h, r);
 }
 
+// קופסה כהה עם קו פליז דק (לעובדות ולפרסים בתחתית)
+function box(ctx: CanvasRenderingContext2D, x: number, y: number, w: number) {
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  round(ctx, x, y, w, 150, 22);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(201,162,74,0.35)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+}
+
 export async function drawNightCard(st: NightStats, roomName: string, lang: Lang): Promise<Blob> {
   const he = lang === 'he';
   const dir: CanvasDirection = he ? 'rtl' : 'ltr';
@@ -126,28 +136,35 @@ export async function drawNightCard(st: NightStats, roomName: string, lang: Lang
     y += 70;
   });
 
-  // שתי עובדות בתחתית
-  const facts: { label: string; value: string; sub: string }[] = [];
-  if (st.biggest)
-    facts.push({ label: he ? 'הקופה הגדולה' : 'Biggest pot', value: fmt(st.biggest.amount), sub: st.biggest.name + (st.biggest.cat != null ? ` (${handName(st.biggest.cat, lang)})` : '') });
-  if (st.best) facts.push({ label: he ? 'היד הכי חזקה' : 'Best hand', value: handName(st.best.cat, lang), sub: st.best.name });
-  else if (st.blackjacks) facts.push({ label: he ? 'הכי הרבה בלאק ג׳ק' : 'Most blackjacks', value: String(st.blackjacks.n), sub: st.blackjacks.name });
-  else if (st.mostWins) facts.push({ label: he ? 'הכי הרבה ניצחונות' : 'Most wins', value: String(st.mostWins.n), sub: st.mostWins.name });
+  // בתחתית: שני פרסי השפלה כשיש - ואם אין, שתי עובדות (הקופה הגדולה, היד הכי חזקה)
   const fy = Math.max(y + 10, 1090);
-  const fw = facts.length === 2 ? 400 : 820;
-  facts.slice(0, 2).forEach((f, i) => {
-    const x = facts.length === 2 ? (he ? W - 130 - fw - i * (fw + 20) : 130 + i * (fw + 20)) : 130;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    round(ctx, x, fy, fw, 150, 22);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(201,162,74,0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    const cx = x + fw / 2;
-    text(ctx, f.label, cx, fy + 42, { size: 26, weight: 500, color: 'rgba(243,237,224,0.62)', dir });
-    text(ctx, f.value, cx, fy + 92, { size: 44, weight: 800, color: BRASS_HI, dir: 'inherit', max: fw - 40, font: /^[\d,.]+$/.test(f.value) ? NUM : SANS });
-    text(ctx, f.sub, cx, fy + 130, { size: 26, weight: 500, dir: 'inherit', max: fw - 40 });
-  });
+  const awards = st.awards.slice(0, 2);
+  if (awards.length === 2) {
+    awards.forEach((a, i) => {
+      const x = he ? W - 130 - 400 - i * 420 : 130 + i * 420;
+      box(ctx, x, fy, 400);
+      const cx = x + 200;
+      text(ctx, a.title, cx, fy + 48, { size: 36, weight: 800, color: BRASS_HI, dir, max: 360 });
+      text(ctx, a.name, cx, fy + 91, { size: 30, weight: 700, dir: 'inherit', max: 360 });
+      text(ctx, a.line, cx, fy + 129, { size: 25, weight: 500, color: 'rgba(243,237,224,0.62)', dir, max: 364 });
+    });
+  } else {
+    const facts: { label: string; value: string; sub: string }[] = [];
+    if (st.biggest)
+      facts.push({ label: he ? 'הקופה הגדולה' : 'Biggest pot', value: fmt(st.biggest.amount), sub: st.biggest.name + (st.biggest.cat != null ? ` (${handName(st.biggest.cat, lang)})` : '') });
+    if (st.best) facts.push({ label: he ? 'היד הכי חזקה' : 'Best hand', value: handName(st.best.cat, lang), sub: st.best.name });
+    else if (st.blackjacks) facts.push({ label: he ? 'הכי הרבה בלאק ג׳ק' : 'Most blackjacks', value: String(st.blackjacks.n), sub: st.blackjacks.name });
+    else if (st.mostWins) facts.push({ label: he ? 'הכי הרבה ניצחונות' : 'Most wins', value: String(st.mostWins.n), sub: st.mostWins.name });
+    const fw = facts.length === 2 ? 400 : 820;
+    facts.slice(0, 2).forEach((f, i) => {
+      const x = facts.length === 2 ? (he ? W - 130 - fw - i * (fw + 20) : 130 + i * (fw + 20)) : 130;
+      box(ctx, x, fy, fw);
+      const cx = x + fw / 2;
+      text(ctx, f.label, cx, fy + 42, { size: 26, weight: 500, color: 'rgba(243,237,224,0.62)', dir });
+      text(ctx, f.value, cx, fy + 92, { size: 44, weight: 800, color: BRASS_HI, dir: 'inherit', max: fw - 40, font: /^[\d,.]+$/.test(f.value) ? NUM : SANS });
+      text(ctx, f.sub, cx, fy + 130, { size: 26, weight: 500, dir: 'inherit', max: fw - 40 });
+    });
+  }
 
   text(ctx, he ? 'שוחק ב-King Jack' : 'Played on King Jack', W / 2, H - 70, { size: 26, weight: 500, color: 'rgba(243,237,224,0.5)', dir });
 

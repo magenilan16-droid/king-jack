@@ -1,6 +1,6 @@
 // הבוטים מדברים: אחרי רגעים גדולים (קופה גדולה, בלוף, "הריבר הרג אותי") בוט כותב משהו בצ׳אט,
 // ולפעמים גם זורק אימוג׳י או עגבנייה. לא בכל יד - כדי שזה יישאר מצחיק ולא יציף
-import { botSeed } from './common.ts';
+import { botSeed, isGranny } from './common.ts';
 import { type HState, runoutMs, runoutStages } from './holdem.ts';
 import type { BJState } from './blackjack.ts';
 
@@ -65,6 +65,55 @@ export const BOT_LINES: Record<string, { he: string[]; en: string[] }> = {
     he: ['בלאק ג׳ק ל{n}, יפה', '{n} עם בלאק ג׳ק. מי מחלק פה?', 'נו {n}, תשאיר גם לנו'],
     en: ['Blackjack for {n}, nice', '{n} with a blackjack. Who is dealing here?', 'Come on {n}, leave some for us'],
   },
+  // ---------- סבתא של תמיר ----------
+  g_win_big: {
+    he: ['תמיר, תגיד תודה לסבתא', 'בזמני שיחקנו על גרעינים. עכשיו על הכסף שלכם', 'סבתא לא שכחה איך משחקים', 'קחו עוגייה, שלא תהיו עצובים'],
+    en: ["Tamir, say thank you to Grandma", 'In my day we played for sunflower seeds. Now for your money', "Grandma hasn't forgotten how to play", "Have a cookie, don't be sad"],
+  },
+  g_lose_big: {
+    he: ['אוי, הלב שלי', 'תמיר! תביא לי את הכדורים', 'זה כי לא הרכבתי משקפיים', 'לא נורא, יש לי פנסיה'],
+    en: ['Oy, my heart', 'Tamir! Bring me my pills', "That's because I wasn't wearing my glasses", "Never mind, I have a pension"],
+  },
+  g_bad_beat: {
+    he: ['הייתי {p}%! פעם קלפים כיבדו זקנים', 'הריבר הזה לא מכבד את סבתא שלו', 'אני אספר לאמא שלכם'],
+    en: ['I was {p}%! Cards used to respect the elderly', "That river doesn't respect its grandmother", "I'm telling your mother"],
+  },
+  g_suckout: {
+    he: ['סבתא תמיד מאמינה בניסים', 'התפללתי. ככה זה עובד', 'סבא שלמעלה שלח לי את הקלף'],
+    en: ['Grandma always believes in miracles', 'I prayed. That is how it works', 'Grandpa up there sent me that card'],
+  },
+  g_human_monster: {
+    he: ['{n}, בוא תן לסבתא נשיקה', '{n}, אמא שלך יודעת שאתה משחק ככה?', 'כל הכבוד {n}, אבל לאכול אכלת היום?'],
+    en: ['{n}, come give Grandma a kiss', '{n}, does your mother know you play like this?', 'Well done {n}, but did you eat today?'],
+  },
+  g_bluff_show: {
+    he: ['חשבתם שסבתא לא יודעת לבלף?', 'זבל ביד, ולקחתי. ככה זה בגיל שלי', 'לא שמעתם שסבתות לא משקרות? אז שמעתם לא נכון'],
+    en: ["Thought Grandma can't bluff?", 'Garbage in hand, and I took it. That is how it is at my age', 'Heard grandmas never lie? You heard wrong'],
+  },
+  g_allin: {
+    he: ['סבתא נכנסת עם הכל! שמישהו יחזיק לי את התיק', 'אול-אין, ואחר כך מרק', 'יאללה, מה כבר יכול לקרות לי'],
+    en: ['Grandma is going all in! Someone hold my purse', 'All-in, and then soup', 'Come on, what could happen to me'],
+  },
+  g_bust: {
+    he: ['נגמר. תמיר, תזמין לי מונית', 'סבתא הולכת לנוח. אל תשכחו לאכול', 'עוד אחת ואני מתקשרת לסבא'],
+    en: ['That is it. Tamir, call me a taxi', "Grandma's going to rest. Don't forget to eat", "One more and I'm calling Grandpa"],
+  },
+  g_bj_blackjack: {
+    he: ['בלאק ג׳ק! סבתא עוד יודעת לספור עד 21', 'עשרים ואחת, כמו הגיל שלי בלב', 'ראיתם? בלי משקפיים'],
+    en: ['Blackjack! Grandma can still count to 21', "Twenty-one, like my age at heart", 'See that? Without glasses'],
+  },
+  g_bj_bust: {
+    he: ['22? המספרים האלה מבלבלים אותי', 'שוב לקחתי קלף אחד יותר מדי, כמו עם העוגיות', 'מי הזיז לי את הקלפים?'],
+    en: ['22? These numbers confuse me', 'One card too many again, like with the cookies', 'Who moved my cards?'],
+  },
+  g_bj_dealer_bust: {
+    he: ['הדילר נשרף, כמו הקוגל שלי', 'יופי, בשבת אני מכינה לכולם שניצל'],
+    en: ['The dealer is burnt, like my kugel', "Lovely, on Saturday I'm making schnitzel for everyone"],
+  },
+  g_bj_human: {
+    he: ['{n}, איזה מזל, בדיוק כמו סבא שלך', 'בלאק ג׳ק ל{n}! תמיר, למה אתה לא כזה?'],
+    en: ['{n}, what luck, just like your grandpa', 'Blackjack for {n}! Tamir, why are you not like that?'],
+  },
 };
 
 export function fillLine(text: string, vars?: Record<string, string>) {
@@ -73,7 +122,7 @@ export function fillLine(text: string, vars?: Record<string, string>) {
 
 // כמה כל בוט אוהב לדבר (לפי האופי שלו): רגיל, שקט, פטפטן, רגוע
 const TALK = [1, 0.7, 1.4, 0.9];
-const talky = (id: string) => TALK[botSeed(id) % TALK.length];
+const talky = (id: string) => (isGranny(id) ? 1.7 : TALK[botSeed(id) % TALK.length]);
 const pickIdx = (n: number) => Math.floor(Math.random() * n);
 const pickOne = <T,>(a: T[]) => a[pickIdx(a.length)];
 // מרווח מינימלי בין שתי שורות של בוטים באותו שולחן
@@ -82,6 +131,8 @@ const GAP_MS = 15000;
 type Pub = (HState | BJState) & { botTalkAt?: number };
 
 function say(id: string, name: string, key: string, delay: number, vars?: Record<string, string>, fx?: BotFx): BotSay {
+  // לסבתא של תמיר יש משפטים משלה
+  if (isGranny(id) && BOT_LINES['g_' + key]) key = 'g_' + key;
   return { id, name, key: `${key}:${pickIdx(BOT_LINES[key].he.length)}`, vars, delay: Math.round(delay), fx };
 }
 

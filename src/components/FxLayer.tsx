@@ -5,7 +5,7 @@ import type { FxEvent } from '../lib/fx';
 import type { ChatMsg } from '../engine/room';
 import { chatText } from '../lib/display';
 import { getLang } from '../lib/i18n';
-import { Mic } from 'lucide-react';
+import { Mic, Volume2 } from 'lucide-react';
 import { fmtDur, useVoicePlaying } from '../lib/voice';
 import { VoiceBars } from './Chat';
 
@@ -74,6 +74,16 @@ export function FxLayer({ events, chatBubble }: { events: FxEvent[]; chatBubble:
                   👀
                 </span>
               )}
+            </span>
+          );
+        }
+        if (e.kind === 'sound') {
+          const a = centerOf(e.from);
+          if (!a) return null;
+          return (
+            <span key={e.id} className="fx-chat fx-sound" style={{ left: Math.min(Math.max(a.x, 90), window.innerWidth - 90), top: a.y - 34 }}>
+              <Volume2 size={15} strokeWidth={2.4} aria-hidden="true" />
+              <span dir="auto">{e.label}</span>
             </span>
           );
         }

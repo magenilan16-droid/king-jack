@@ -1,5 +1,5 @@
 // שכבה אחידה מעל שני המשחקים - השרת קורא רק לפונקציות כאן
-import { type PlayerBase, type LedgerEffect, fail, BOT_NAMES, BOT_AVATARS, cashoutEffects } from './common.ts';
+import { type PlayerBase, type LedgerEffect, fail, BOT_NAMES, BOT_AVATARS, GRANNY_NAME, GRANNY_AVATAR, isGranny, cashoutEffects } from './common.ts';
 import {
   type BJFull,
   type BJMove,
@@ -48,7 +48,7 @@ export const voicePathOk = (path: string, userId: string) =>
 export type RoomMove =
   | { type: 'rebuy'; amount: number }
   | { type: 'leave' }
-  | { type: 'addBot' }
+  | { type: 'addBot'; granny?: boolean }
   | { type: 'removeBot'; botId: string }
   | { type: 'chat'; text: string }
   | { type: 'voice'; path: string; dur: number }
@@ -112,16 +112,20 @@ function chatOf(f: Full): ChatMsg[] {
 
 // זמן מינימלי להצגת תוצאת יד/סיבוב לפני שאפשר לעבור הלאה
 export const RESULT_MIN_MS = 3000;
+// מישהו הראה קלפים - היד הבאה מחכה שכולם יספיקו לראות
+export const SHOW_HOLD_MS = 3500;
 
 export function act(f: Full, actorId: string, move: RoomMove, now: number): { effects: LedgerEffect[]; closed?: boolean } {
-  const pub = f.pub as Full['pub'] & { endedAt?: number };
+  const pub = f.pub as Full['pub'] & { endedAt?: number; shownAt?: number };
   const before = pub.phase;
   const logLen = pub.kind === 'holdem' ? (pub.handLog?.length ?? 0) : 0;
   // אחרי אול-אין הלוח נחשף לאט - היד הבאה מחכה שההצגה תיגמר
   const ro = pub.kind === 'holdem' && pub.runout && pub.runout.hand === pub.handNo ? pub.runout : null;
   const minMs = RESULT_MIN_MS + (ro ? runoutMs(ro.from) : 0);
   if (move.type === 'next' && now - (pub.endedAt ?? 0) < minMs) fail('רגע - תנו לכולם לראות את התוצאה');
+  if (move.type === 'next' && now - (pub.shownAt ?? 0) < SHOW_HOLD_MS) fail('רגע - תנו לכולם לראות את הקלפים');
   const res = actInner(f, actorId, move, now);
+  if (move.type === 'show') (f.pub as typeof pub).shownAt = now;
   const after = f.pub.phase;
   if (after !== before && (after === 'showdown' || after === 'results')) (f.pub as typeof pub).endedAt = now;
   if (!res.closed) {
@@ -181,6 +185,11 @@ function actInner(f: Full, actorId: string, move: RoomMove, now: number): { effe
     }
     case 'addBot': {
       if (actorId !== pub.hostId) fail('רק המארח יכול להוסיף בוטים');
+      if (move.granny) {
+        if (pub.players.some((p) => isGranny(p.id))) fail('סבתא כבר יושבת בשולחן');
+        const granny: PlayerBase = { id: 'bot-granny' + Math.random().toString(36).slice(2, 6), name: GRANNY_NAME, avatar: GRANNY_AVATAR, isBot: true, chips: 0 };
+        return { effects: joinGame(f, granny, pub.settings.buyIn) };
+      }
       const used = new Set(pub.players.map((p) => p.name));
       const i = BOT_NAMES.findIndex((n) => !used.has(n));
       if (i < 0) fail('אין עוד בוטים פנויים');

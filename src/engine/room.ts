@@ -1,5 +1,5 @@
 // שכבה אחידה מעל שני המשחקים - השרת קורא רק לפונקציות כאן
-import { type PlayerBase, type LedgerEffect, fail, BOT_NAMES, BOT_AVATARS, cashoutEffects } from './common.ts';
+import { type PlayerBase, type LedgerEffect, fail, BOT_NAMES, BOT_AVATARS, GRANNY_NAME, GRANNY_AVATAR, isGranny, cashoutEffects } from './common.ts';
 import {
   type BJFull,
   type BJMove,
@@ -48,7 +48,7 @@ export const voicePathOk = (path: string, userId: string) =>
 export type RoomMove =
   | { type: 'rebuy'; amount: number }
   | { type: 'leave' }
-  | { type: 'addBot' }
+  | { type: 'addBot'; granny?: boolean }
   | { type: 'removeBot'; botId: string }
   | { type: 'chat'; text: string }
   | { type: 'voice'; path: string; dur: number }
@@ -185,6 +185,11 @@ function actInner(f: Full, actorId: string, move: RoomMove, now: number): { effe
     }
     case 'addBot': {
       if (actorId !== pub.hostId) fail('רק המארח יכול להוסיף בוטים');
+      if (move.granny) {
+        if (pub.players.some((p) => isGranny(p.id))) fail('סבתא כבר יושבת בשולחן');
+        const granny: PlayerBase = { id: 'bot-granny' + Math.random().toString(36).slice(2, 6), name: GRANNY_NAME, avatar: GRANNY_AVATAR, isBot: true, chips: 0 };
+        return { effects: joinGame(f, granny, pub.settings.buyIn) };
+      }
       const used = new Set(pub.players.map((p) => p.name));
       const i = BOT_NAMES.findIndex((n) => !used.has(n));
       if (i < 0) fail('אין עוד בוטים פנויים');

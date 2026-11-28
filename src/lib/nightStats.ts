@@ -5,6 +5,7 @@ import type { Card } from '../engine/cards';
 import type { PlayerLine } from './balances';
 import type { Lang } from './i18n';
 import { displayName } from './display';
+import { computeAwards, type Award } from './awards';
 
 export type HandRow = { hand_no: number; created_at: string; data: HoldemHandRecord | BlackjackHandRecord };
 
@@ -19,9 +20,11 @@ export interface NightStats {
   best: { cat: number; name: string; cards: Card[] } | null;
   mostWins: { name: string; n: number } | null;
   blackjacks: { name: string; n: number } | null;
+  awards: Award[]; // פרסי השפלה
 }
 
-export function nightStats(lines: PlayerLine[], rows: HandRow[], lang: Lang): NightStats {
+// buyCount (מצב השולחן): כמה פעמים כל אחד קנה - לפרס "כספומט הערב"
+export function nightStats(lines: PlayerLine[], rows: HandRow[], lang: Lang, buyCount?: Record<string, number>): NightStats {
   const sorted = [...lines].sort((a, b) => b.net - a.net);
   const king = sorted[0] && sorted[0].net > 0 ? sorted[0] : null;
   const last = sorted[sorted.length - 1];
@@ -84,6 +87,7 @@ export function nightStats(lines: PlayerLine[], rows: HandRow[], lang: Lang): Ni
     best,
     mostWins: topOf(wins),
     blackjacks: topOf(bjs),
+    awards: computeAwards(sorted, rows, lang, buyCount),
   };
 }
 

@@ -4,7 +4,7 @@
 import { type Card, rankOf, suitOf } from './cards.ts';
 import { bestFor } from './handEval.ts';
 import { equityVs, type HandFilter } from './equity.ts';
-import { botSeed, botSpeed, between } from './common.ts';
+import { botSeed, botSpeed, between, isGranny } from './common.ts';
 import { type HFull, type HPlayer, type HMove, type HState, type HandLogEntry, potSize, potLimitTo, isOmaha, canAct } from './holdem.ts';
 
 // ---------- אופי ----------
@@ -20,7 +20,9 @@ const STYLES: Style[] = [
   { loose: 1, aggr: 0.85, bluff: 0.16, trap: 0.1 }, // פרוע ומהיר
   { loose: 0.5, aggr: 0.45, bluff: 0.07, trap: 0.2 }, // רגוע, אוהב לראות פלופים
 ];
-export const styleOf = (id: string): Style => STYLES[botSeed(id) % STYLES.length];
+// סבתא של תמיר: מחכה לקלפים טובים, כמעט לא מבלפת, אוהבת להסתיר יד חזקה
+const GRANNY: Style = { loose: -1.6, aggr: 0.35, bluff: 0.02, trap: 0.45 };
+export const styleOf = (id: string): Style => (isGranny(id) ? GRANNY : STYLES[botSeed(id) % STYLES.length]);
 
 // ---------- חוזק יד לפני הפלופ ----------
 // נוסחת צ׳ן (Chen) - דירוג מקובל של 2 קלפים: AA=20, KK=16, AKs=12, 72o=-1
@@ -417,5 +419,7 @@ export function pokerBotPlan(f: HFull, p: HPlayer): { move: HMove; think: number
           ? omahaPreflop(c)
           : holdemPreflop(c)
         : postflop(c);
+  // ולפעמים סבתא משתגעת: אול-אין לפני הפלופ, עם מה שיש לה ביד
+  if (isGranny(p.id) && f.pub.phase === 'preflop' && c.canRaise && Math.random() < 0.03) return { move: shove(c), think: thinkTime(c, { move: shove(c), hard: 1 }) };
   return { move: d.move, think: thinkTime(c, d) };
 }

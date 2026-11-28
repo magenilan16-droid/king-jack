@@ -1,5 +1,5 @@
 // תצוגה לפי שפה: שמות בוטים, פעולות אחרונות ושמות ידיים
-import { BOT_NAMES } from '../engine/common';
+import { BOT_NAMES, GRANNY_NAME } from '../engine/common';
 import { HAND_NAMES, HAND_NAMES_EN } from '../engine/handEval';
 import { BOT_LINES, fillLine } from '../engine/botTalk';
 import type { ChatMsg } from '../engine/room';
@@ -9,6 +9,7 @@ const BOT_EN = ['Robo Rafi', 'Botty', 'Chippy', 'Dr. Card', 'Max', 'Lulu', 'John
 
 export function displayName(p: { name: string; isBot?: boolean }, lang: Lang): string {
   if (!p.isBot || lang === 'he') return p.name;
+  if (p.name === GRANNY_NAME) return "Tamir's Grandma";
   const i = BOT_NAMES.indexOf(p.name);
   return i >= 0 ? BOT_EN[i] : p.name;
 }
