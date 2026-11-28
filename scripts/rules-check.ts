@@ -225,7 +225,7 @@ const tryAct = (fn: () => unknown) => {
   const g = f.pub.players.find((p) => p.id.startsWith('bot-granny'));
   check('granny: she is at the table', !!g && g.name === 'סבתא של תמיר' && g.isBot);
   check('granny: only one grandma', tryAct(() => act(full, 'A', { type: 'addBot', granny: true } as never, 0)) !== null);
-  const bad = Object.entries(BOT_LINES).filter(([k, v]) => k.startsWith('g_') && (v.he.length !== v.en.length || !BOT_LINES[k.slice(2)]));
+  const bad = Object.entries(BOT_LINES).filter(([k, v]) => k.startsWith('g_') && (v.he.length !== v.en.length || (k !== 'g_idle' && !BOT_LINES[k.slice(2)])));
   check('granny: every line has Hebrew + English and a matching moment', bad.length === 0, bad.map(([k]) => k).join(','));
 }
 

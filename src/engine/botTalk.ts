@@ -65,54 +65,59 @@ export const BOT_LINES: Record<string, { he: string[]; en: string[] }> = {
     he: ['בלאק ג׳ק ל{n}, יפה', '{n} עם בלאק ג׳ק. מי מחלק פה?', 'נו {n}, תשאיר גם לנו'],
     en: ['Blackjack for {n}, nice', '{n} with a blackjack. Who is dealing here?', 'Come on {n}, leave some for us'],
   },
-  // ---------- סבתא של תמיר ----------
+  // ---------- סבתא של תמיר (הבדיחות של "הועד הדצמבר", הקבוצה של החבר'ה) ----------
   g_win_big: {
-    he: ['תמיר, תגיד תודה לסבתא', 'בזמני שיחקנו על גרעינים. עכשיו על הכסף שלכם', 'סבתא לא שכחה איך משחקים', 'קחו עוגייה, שלא תהיו עצובים'],
-    en: ["Tamir, say thank you to Grandma", 'In my day we played for sunflower seeds. Now for your money', "Grandma hasn't forgotten how to play", "Have a cookie, don't be sad"],
+    he: ['תמיר, תגיד לחברים שלך שסבתא מקבלת רק פייבוקס. אל תהיו פראיירים', 'הכל הולך לבר. האלכוהול של סבתא של תמיר פתוח הערב', 'ולוסקי צדק. אין השקעה יותר טובה מסבתא של תמיר', 'אל תגידו ימלך. תגידו תמלוך', 'טובי, אל תשאל מה עם התשלומים. הם אצלי', 'ככה סבתא אוהבת: הכל באמצע וכולם גומרים… את הז׳טונים'],
+    en: ["Tamir, tell your friends Grandma only takes PayBox. Don't be suckers", "It all goes to the bar. Tamir's Grandma's Booze is open tonight", "Velosky was right. There's no better investment than Tamir's grandma", "Don't say king. Say queen", "Tobi, don't ask about the payments. They're with me", "That's how Grandma likes it: everything in the middle and everyone finishes… their chips"],
   },
   g_lose_big: {
-    he: ['אוי, הלב שלי', 'תמיר! תביא לי את הכדורים', 'זה כי לא הרכבתי משקפיים', 'לא נורא, יש לי פנסיה'],
-    en: ['Oy, my heart', 'Tamir! Bring me my pills', "That's because I wasn't wearing my glasses", "Never mind, I have a pension"],
+    he: ['זה לא נגמר פה. אני מפעילה את מערך ההגנה', 'אני מתקשרת לתמיר פלטינום, הוא פותר הכל', 'בשביל זה ריססתי אתמול את כל האזור?', 'כל הקרינה שאני פולטת, וגם זה לא עזר', 'ציון, עכשיו זה זמן טוב להעביר לי מה שאתה חייב'],
+    en: ["This isn't over. I'm activating the defense system", "I'm calling Tamir Platinum, he fixes everything", 'I sprayed the whole area yesterday for this?', "All the radiation I give off, and even that didn't help", 'Zion, now is a good time to pay me what you owe'],
   },
   g_bad_beat: {
-    he: ['הייתי {p}%! פעם קלפים כיבדו זקנים', 'הריבר הזה לא מכבד את סבתא שלו', 'אני אספר לאמא שלכם'],
-    en: ['I was {p}%! Cards used to respect the elderly', "That river doesn't respect its grandmother", "I'm telling your mother"],
+    he: ['הייתי {p}%! בגימטריה זה יוצא סבתא של תמיר, אז איך הפסדתי?', 'הייתי {p}%. שמעתי לחשושים שהריבר הזה מכור', 'ריבר כזה זה לא בצורה מכבדת', 'אמאלה. {p}% והלך. אני הולכת לבר שלי'],
+    en: ["I was {p}%! In gematria that equals Tamir's grandma, so how did I lose?", "I was {p}%. I heard whispers that river was bought", "A river like that is not respectful", "Mama. {p}% and gone. I'm off to my bar"],
   },
   g_suckout: {
-    he: ['סבתא תמיד מאמינה בניסים', 'התפללתי. ככה זה עובד', 'סבא שלמעלה שלח לי את הקלף'],
-    en: ['Grandma always believes in miracles', 'I prayed. That is how it works', 'Grandpa up there sent me that card'],
+    he: ['אמת. סבתא רואה עתידות', 'יש לי קשרים למעלה. תת-אלוף, תזכרו', 'מנוי פלטינום פרו מקס. הקלף מגיע עד הבית', 'קטלני. אני יודעת'],
+    en: ['True. Grandma sees the future', 'I have connections up there. Brigadier general, remember', 'Platinum Pro Max subscription. The card comes to your door', 'Deadly. I know'],
   },
   g_human_monster: {
-    he: ['{n}, בוא תן לסבתא נשיקה', '{n}, אמא שלך יודעת שאתה משחק ככה?', 'כל הכבוד {n}, אבל לאכול אכלת היום?'],
-    en: ['{n}, come give Grandma a kiss', '{n}, does your mother know you play like this?', 'Well done {n}, but did you eat today?'],
+    he: ['{n}, ימלך. אבל לא יותר מסבתא', 'מטורף {n}. אשכרה', '{n}, אתה מוזמן לבר שלי, על חשבון הבית', 'נויסססס {n}', '{n}, מחזק. תמיר, למה אתה לא כזה?', '{n}, ככה גדול? סבתא מתרשמת', '{n}, עם יד כזאת בוא נדבר אחרי המשחק'],
+    en: ['{n}, king. But not more than Grandma', 'Insane, {n}. For real', "{n}, you're invited to my bar, on the house", 'Noice, {n}', '{n}, respect. Tamir, why are you not like that?', '{n}, that big? Grandma is impressed', "{n}, with a hand like that, let's talk after the game"],
   },
   g_bluff_show: {
-    he: ['חשבתם שסבתא לא יודעת לבלף?', 'זבל ביד, ולקחתי. ככה זה בגיל שלי', 'לא שמעתם שסבתות לא משקרות? אז שמעתם לא נכון'],
-    en: ["Thought Grandma can't bluff?", 'Garbage in hand, and I took it. That is how it is at my age', 'Heard grandmas never lie? You heard wrong'],
+    he: ['בלוף. בצורה מכבדת', 'סבתא אחראית על מערך ההגנה. להטעות זה חלק מהתפקיד', 'שמעתם לחשושים שיש לי יד? לחשושים, חמודים', 'כלום ביד. אמת', 'לא הייתה לי יד. היה לי ביטחון. ככה גם במיטה'],
+    en: ['A bluff. In a respectful manner', 'Grandma runs the defense system. Deception is part of the job', 'You heard whispers I had a hand? Just whispers, sweeties', 'Nothing in hand. True story', "I didn't have a hand. I had confidence. Same in bed"],
   },
   g_allin: {
-    he: ['סבתא נכנסת עם הכל! שמישהו יחזיק לי את התיק', 'אול-אין, ואחר כך מרק', 'יאללה, מה כבר יכול לקרות לי'],
-    en: ['Grandma is going all in! Someone hold my purse', 'All-in, and then soup', 'Come on, what could happen to me'],
+    he: ['סבתא נכנסת עם הכל. בצורה מכבדת כמובן', 'אול-אין! ולוסקי, תשקיע עכשיו, זה הנדל״ן החדש', 'תת-אלוף סבתא תמיר מאשרת: הכל באמצע', 'מי בא? שמעתי לחשושים שיש לכם זבל', 'סבתא נכנסת עד הסוף. מי בא?', 'אני אוהבת את זה גדול. את הקופה, חמודים, את הקופה'],
+    en: ['Grandma is all in. In a respectful manner, of course', "All-in! Velosky, invest now, I'm the new real estate", 'Brigadier General Grandma Tamir confirms: everything in', "Who's coming? I heard whispers you've got garbage", "Grandma goes all the way in. Who's coming?", 'I like it big. The pot, sweeties, the pot'],
   },
   g_bust: {
-    he: ['נגמר. תמיר, תזמין לי מונית', 'סבתא הולכת לנוח. אל תשכחו לאכול', 'עוד אחת ואני מתקשרת לסבא'],
-    en: ['That is it. Tamir, call me a taxi', "Grandma's going to rest. Don't forget to eat", "One more and I'm calling Grandpa"],
+    he: ['נגמר לי. אני הולכת לשבת באוטובוס באורנית, מי בא?', 'סבתא נשרפה. מישהו יכול לעשות לי ביט?', 'זהו, אני חוזרת לנהל את הריסוסים', 'יש דיבור על ישיבה אחרת? פה סיימתי', 'נגמרו לי הז׳טונים, לא הכוח. מי מלווה אותי הביתה?'],
+    en: ["I'm out. Going to sit in the bus in Oranit, who's coming?", "Grandma's broke. Can someone send me a Bit?", "That's it, back to running the spraying", "Any talk of another hangout? I'm done here", "Out of chips, not out of stamina. Who's walking me home?"],
   },
   g_bj_blackjack: {
-    he: ['בלאק ג׳ק! סבתא עוד יודעת לספור עד 21', 'עשרים ואחת, כמו הגיל שלי בלב', 'ראיתם? בלי משקפיים'],
-    en: ['Blackjack! Grandma can still count to 21', "Twenty-one, like my age at heart", 'See that? Without glasses'],
+    he: ['בלאק ג׳ק! היידה', 'עשרים ואחת. בגימטריה זה אני', 'בלאק ג׳ק! תגידו לולוסקי שהמניה עלתה'],
+    en: ["Blackjack! Let's go", 'Twenty-one. In gematria that is me', 'Blackjack! Tell Velosky the stock went up'],
   },
   g_bj_bust: {
-    he: ['22? המספרים האלה מבלבלים אותי', 'שוב לקחתי קלף אחד יותר מדי, כמו עם העוגיות', 'מי הזיז לי את הקלפים?'],
-    en: ['22? These numbers confuse me', 'One card too many again, like with the cookies', 'Who moved my cards?'],
+    he: ['22? מי ריסס לי את הקלפים?', 'נשרפתי. זה מהקרינה', 'לקחתי עוד קלף. לא בצורה מכבדת', '22. תמיד לקחתי יותר ממה שאני יכולה להכיל'],
+    en: ['22? Who sprayed my cards?', 'Busted. It is the radiation', 'I took one more card. Not respectfully', '22. I always took more than I could handle'],
   },
   g_bj_dealer_bust: {
-    he: ['הדילר נשרף, כמו הקוגל שלי', 'יופי, בשבת אני מכינה לכולם שניצל'],
-    en: ['The dealer is burnt, like my kugel', "Lovely, on Saturday I'm making schnitzel for everyone"],
+    he: ['הדילר נשרף! סיבוב בבר שלי עליי', 'יגבר! הדילר בחוץ'],
+    en: ['The dealer busts! A round at my bar, on me', 'Yes! The dealer is out'],
   },
   g_bj_human: {
-    he: ['{n}, איזה מזל, בדיוק כמו סבא שלך', 'בלאק ג׳ק ל{n}! תמיר, למה אתה לא כזה?'],
-    en: ['{n}, what luck, just like your grandpa', 'Blackjack for {n}! Tamir, why are you not like that?'],
+    he: ['{n}, בלאק ג׳ק! ימלך', 'בלאק ג׳ק ל{n}. תמיר, למה אתה לא כזה?', '{n}, מחזק. הסיבוב הבא בבר עליך'],
+    en: ['{n}, blackjack! King', 'Blackjack for {n}. Tamir, why are you not like that?', '{n}, respect. Next round at the bar is on you'],
+  },
+  // סתם משפטים שהיא זורקת בין הידיים
+  g_idle: {
+    he: ['יש דיבור על ישיבה אחרי המשחק?', 'בבר, אל תשאל. יש ישיבה. אצלי', 'תמיר, אמרת לחברים שלך לשחק בצורה מכבדת?', 'גוטסמן, מתי פותחים את הסניף של הועד הדצמבר באמריקה?', 'ח״י בדצמבר מתקרב. סבתא כבר קנתה בגדים', 'אליה, הבירות עליך הערב', 'טובי, מה עם התשלומים?', 'ציון, תעביר. אתה יודע מה', 'אני לא סתם סבתא. אני אחראית ריסוסים אזורית', 'ולוסקי, איך ההשקעה? סבתא עלתה 30% השבוע', 'שמעתי לחשושים על צריכת אלכוהול מופרזת הערב', 'אילן, באים להפסיד בפוקר, אני מבין?', 'ירון, יש ישיבה? יש. פה', 'מי שיש לו בירות שיביא', 'ישיבת הועד הדצמבר נפתחת. סבתא בראש השולחן', 'עומייסי, שמעתי שאתה אוהב אותן מבוגרות. סבתא פנויה אחרי המשחק', 'אילן, אמרת שאני צריכה להפסיק לשכב איתכם בשלישייה? אז רביעייה', 'תמיר פלטינום זה לחובבנים. אני הגרסה הפרו מקס', 'יש לי טינדר פלטינום. מאצ׳ עם כל השולחן', 'מי שמפסיד הערב ישן אצל סבתא', 'סבתא מקבלת את כולם. אחד-אחד, בסבלנות'],
+    en: ['Any talk of a hangout after the game?', "Babar, don't ask. There's a hangout. At mine", 'Tamir, did you tell your friends to play respectfully?', "Gutsman, when are we opening the December Committee's branch in America?", 'The 18th of December is coming. Grandma already bought an outfit', 'Eliya, the beers are on you tonight', 'Tobi, what about the payments?', 'Zion, pay up. You know what for', "I'm not just a grandma. I'm the regional spraying officer", "Velosky, how's the investment? Grandma is up 30% this week", 'I heard whispers about excessive drinking tonight', 'Ilan, came here to lose at poker, I see?', "Yaron, is there a hangout? There is. Here", 'Whoever has beers, bring them', 'The December Committee meeting is open. Grandma at the head of the table', 'Omaisy, I heard you like them older. Grandma is free after the game', 'Ilan, you said I should stop having threesomes with you? Then a foursome', "Tamir Platinum is for amateurs. I'm the Pro Max version", "I've got Tinder Platinum. Matched with the whole table", "Whoever loses tonight sleeps at Grandma's", 'Grandma takes everyone. One at a time, patiently'],
   },
 };
 
@@ -140,9 +145,22 @@ function say(id: string, name: string, key: string, delay: number, vars?: Record
 export function botBanter(pub: Pub, before: { phase: string; logLen: number }, now: number): BotSay | null {
   if (now - (pub.botTalkAt ?? 0) < GAP_MS) return null;
   if (!pub.players.some((p) => !p.isBot)) return null;
-  const out = pub.kind === 'holdem' ? holdemTalk(pub, before) : blackjackTalk(pub, before);
+  const out = (pub.kind === 'holdem' ? holdemTalk(pub, before) : blackjackTalk(pub, before)) ?? grannyIdle(pub, before);
   if (out) pub.botTalkAt = now;
   return out;
+}
+
+// סבתא של תמיר זורקת סתם משפט של החבורה בסוף יד (בערך פעם ב-8 ידיים), אם אף אחד לא דיבר
+function grannyIdle(pub: Pub, before: { phase: string }): BotSay | null {
+  const g = pub.players.find((p) => isGranny(p.id));
+  if (!g || Math.random() >= 0.07 * talky(g.id)) return null;
+  if (pub.kind === 'holdem') {
+    if (pub.phase !== 'showdown' || before.phase === 'showdown') return null;
+    const ro = pub.runout && pub.runout.hand === pub.handNo ? pub.runout : null;
+    return say(g.id, g.name, 'idle', (ro ? runoutMs(ro.from) : 0) + 1800 + Math.random() * 1200);
+  }
+  if (pub.phase !== 'results' || before.phase === 'results') return null;
+  return say(g.id, g.name, 'idle', 2800 + Math.random() * 1000);
 }
 
 function holdemTalk(s: HState, before: { phase: string; logLen: number }): BotSay | null {

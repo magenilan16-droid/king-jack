@@ -5,17 +5,17 @@ import { Sheet } from './ui';
 import { useI18n } from '../lib/i18n';
 
 const KEY = 'kj-news';
-const VERSION = '2026-11-28';
+const VERSION = '2026-11-28b';
 
 // v = באיזה עדכון הפריט נוסף. מי שכבר ראה עדכון קודם רואה רק את מה שנוסף אחריו
 const ITEMS: { v: string; icon: LucideIcon; he: string; en: string; heSub: string; enSub: string; photo?: boolean }[] = [
   {
-    v: '2026-11-28',
+    v: '2026-11-28b',
     icon: Armchair,
     he: 'סבתא של תמיר הגיעה לשולחן',
     en: "Tamir's Grandma joined the table",
-    heSub: 'בוט מיוחד של החבורה: זהירה, איטית, מדברת בלי הפסקה, ולפעמים משתגעת והולכת על הכל. המארח מושיב אותה מהתפריט.',
-    enSub: 'A special bot of the gang: careful, slow, never stops talking, and sometimes goes all in. The host seats her from the menu.',
+    heSub: 'משחקת כמו כל בוט, אבל מדברת כמו הועד: תת-אלוף, אחראית ריסוסים, הבר שלה, ומי עוד לא העביר. המארח מושיב אותה מהתפריט.',
+    enSub: "Plays like any bot, but talks like the gang: the brigadier general, the spraying officer, her bar, and who still hasn't paid. The host seats her from the menu.",
   },
   {
     v: '2026-11-28',

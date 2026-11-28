@@ -37,7 +37,7 @@ export const MAX_STRIKES = 2;
 export const BOT_NAMES = ['רובוט רפי', 'בוטי', 'צ׳יפי', 'ד״ר קלף', 'מקס', 'לולו', 'ג׳וני', 'בינה'];
 export const BOT_AVATARS = ['🤖', '👾', '🦾', '🧠', '🎰', '🦊', '🐙', '🦉'];
 
-// סבתא של תמיר - הבוט המיוחד של החבורה: זהירה מאוד, איטית, מדברת הרבה, ולפעמים משתגעת והולכת אול-אין
+// סבתא של תמיר - הבוט של החבורה: משחקת כמו כל בוט, אבל מדברת הרבה ועם משפטים משלה
 export const GRANNY_NAME = 'סבתא של תמיר';
 export const GRANNY_AVATAR = '👵';
 export const isGranny = (id: string) => id.startsWith('bot-granny');
@@ -51,7 +51,7 @@ export function botSeed(id: string): number {
 
 // קצב המחשבה של כל בוט (אותו בוט - אותו קצב בכל המשחקים): רגיל, איטי, מהיר, קצת איטי
 const BOT_SPEEDS = [1, 1.25, 0.8, 1.05];
-export const botSpeed = (id: string) => (isGranny(id) ? 1.35 : BOT_SPEEDS[botSeed(id) % BOT_SPEEDS.length]);
+export const botSpeed = (id: string) => BOT_SPEEDS[botSeed(id) % BOT_SPEEDS.length];
 
 // מספר אקראי בטווח (לזמני מחשבה)
 export const between = (a: number, b: number) => a + Math.random() * (b - a);
