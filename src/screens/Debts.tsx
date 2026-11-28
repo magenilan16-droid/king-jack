@@ -1,12 +1,13 @@
 // לוח חובות: מה פתוח בין כל הערבים, סימון "שולם", וקיזוז כולל
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, ArrowRight, MessageCircle, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BellRing, MessageCircle, ShieldCheck } from 'lucide-react';
 import { supabase, gameCall, type Profile } from '../lib/supabase';
 import { settle } from '../engine/settle';
 import { fmt } from '../lib/balances';
-import { useI18n } from '../lib/i18n';
+import { useI18n, count } from '../lib/i18n';
+import { KITTY, netsByPerson, owedTotals, type PersonNet } from '../lib/debtNets';
 import { avatarEmoji } from '../lib/display';
-import { AsyncButton, toast } from '../components/ui';
+import { AsyncButton, Sheet, toast } from '../components/ui';
 
 interface DebtRow {
   id: number;
@@ -19,14 +20,14 @@ interface DebtRow {
   created_at: string;
 }
 
-const KITTY = 'kitty';
-
 export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
   const { tr, lang } = useI18n();
   const [tab, setTab] = useState<'mine' | 'all' | 'paid'>('mine');
   const [debts, setDebts] = useState<DebtRow[] | null>(null);
   const [rooms, setRooms] = useState<Record<string, { name: string; closed_at: string }>>({});
   const [people, setPeople] = useState<Record<string, { name: string; avatar: string }>>({});
+  // תזכורת שלא הגיעה לטלפון (אין לו התראות) - מציעים לשלוח את אותו נוסח בוואטסאפ
+  const [wa, setWa] = useState<{ name: string; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('game_debts').select('*').order('created_at', { ascending: false }).limit(500);
@@ -62,8 +63,9 @@ export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
   const open = (debts ?? []).filter((d) => !d.paid);
   const paid = (debts ?? []).filter((d) => d.paid);
   const mine = open.filter((d) => d.from_user === profile.id || d.to_user === profile.id);
-  const iOwe = mine.filter((d) => d.from_user === profile.id).reduce((a, d) => a + Number(d.amount), 0);
-  const owedToMe = mine.filter((d) => d.to_user === profile.id).reduce((a, d) => a + Number(d.amount), 0);
+  // השורה התחתונה מול כל חבר: חייב לו 50+75 והוא חייב לי 99 = אני מעביר לו 26
+  const perPerson = netsByPerson(profile.id, mine);
+  const { owe: iOwe, owed: owedToMe } = owedTotals(perPerson);
 
   // קיזוז כולל: מאחדים את כל החובות הפתוחים להעברות מינימליות
   const nets = new Map<string, number>();
@@ -80,6 +82,34 @@ export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
     const { error } = await supabase.rpc('game_mark_debt', { p_id: d.id, p_paid: value });
     if (error) throw new Error(tr('אין הרשאה', 'Not allowed'));
     toast(value ? tr('סומן כשולם', 'Marked as paid') : tr('הסימון בוטל', 'Unmarked'), 'win');
+    load();
+  };
+
+  // "סבתא גובה חובות": מי שבשורה התחתונה חייב לי מקבל תזכורת בקול של סבתא של תמיר
+  const remind = async (other: string) => {
+    const r = await gameCall<{ ok: boolean; pushed: number; name: string; text: string }>({ op: 'debtNudge', userId: other });
+    if (r.pushed > 0) toast(tr(`סבתא של תמיר שלחה תזכורת ל${r.name}`, `Tamir's Grandma reminded ${r.name}`), 'win');
+    else setWa({ name: r.name, text: r.text });
+  };
+
+  // "סגרנו": מסמנים כשולמו את כל החובות הפתוחים מול החבר הזה (אחרי שהעבירו את השורה התחתונה)
+  const closeWith = async (n: PersonNet<DebtRow>) => {
+    const name = who(n.other === KITTY ? null : n.other);
+    if (n.debts.length > 1) {
+      const all = count(n.debts.length, 'החוב', 'החובות', 'the debt', 'debts');
+      const msg =
+        n.net < 0
+          ? tr(`העברת ל${name} ₪${fmt(-n.net)}? כל ${all} ביניכם יסומנו כשולמו`, `Did you send ${name} ₪${fmt(-n.net)}? All ${all} between you will be marked paid`)
+          : n.net > 0
+            ? tr(`${name} העביר לך ₪${fmt(n.net)}? כל ${all} ביניכם יסומנו כשולמו`, `Did ${name} send you ₪${fmt(n.net)}? All ${all} between you will be marked paid`)
+            : tr(`החובות מול ${name} מתקזזים לאפס. לסמן את כולם כשולמו?`, `Debts with ${name} cancel out. Mark them all as paid?`);
+      if (!confirm(msg)) return;
+    }
+    for (const d of n.debts) {
+      const { error } = await supabase.rpc('game_mark_debt', { p_id: d.id, p_paid: true });
+      if (error) throw new Error(tr('אין הרשאה', 'Not allowed'));
+    }
+    toast(tr(`הכל סגור מול ${name}`, `All settled with ${name}`), 'win');
     load();
   };
 
@@ -114,6 +144,50 @@ export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
       )}
     </div>
   );
+
+  // שורה אחת לכל חבר: מי מעביר למי כמה, אחרי קיזוז
+  const NetRow = ({ n }: { n: PersonNet<DebtRow> }) => {
+    const other = n.other === KITTY ? null : n.other;
+    const one = n.debts.length === 1 ? n.debts[0] : null;
+    return (
+      <div className="debt-row net-row">
+        <div className="grow">
+          <div className="debt-who">
+            {n.net === 0 ? (
+              <span dir="auto">{tr(`מול ${who(other)}`, `With ${who(other)}`)}</span>
+            ) : (
+              <>
+                <span dir="auto">{n.net < 0 ? who(profile.id) : who(other)}</span>
+                <Arrow size={15} aria-label={tr('משלם ל', 'pays')} />
+                <span dir="auto">{n.net < 0 ? who(other) : who(profile.id)}</span>
+              </>
+            )}
+          </div>
+          <div className="sub facts-line">
+            {one ? (
+              <>
+                <span dir="auto">{rooms[one.room_id]?.name ?? ''}</span>
+                <span>{dateFmt(rooms[one.room_id]?.closed_at ?? one.created_at)}</span>
+              </>
+            ) : n.net === 0 ? (
+              <span>{tr(`${n.debts.length} חובות שמתקזזים לאפס`, `${n.debts.length} debts that cancel out`)}</span>
+            ) : (
+              <span>{tr(`בשורה התחתונה, אחרי קיזוז של ${n.debts.length} חובות`, `Bottom line after netting ${n.debts.length} debts`)}</span>
+            )}
+          </div>
+        </div>
+        <b className={`debt-amount ${n.net < 0 ? 'neg' : n.net > 0 ? 'pos' : ''}`}>₪{fmt(Math.abs(n.net))}</b>
+        {n.net > 0 && other && (
+          <AsyncButton className="btn small ghost debt-remind" label={tr(`תזכורת מסבתא ל${who(other)}`, `Grandma reminds ${who(other)}`)} onClick={() => remind(other)}>
+            <BellRing size={16} />
+          </AsyncButton>
+        )}
+        <AsyncButton className="btn small primary" onClick={() => closeWith(n)}>
+          {n.debts.length > 1 ? tr('סגרנו', 'Settled') : tr('שולם', 'Paid')}
+        </AsyncButton>
+      </div>
+    );
+  };
 
   return (
     <div className="screen has-nav">
@@ -152,11 +226,24 @@ export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
         )}
 
         {tab === 'mine' && debts && (mine.length === 0 ? <div className="empty">{tr('אין לך חובות פתוחים', 'You have no open debts')}</div> : (
-          <div className="history">
-            {mine.map((d) => (
-              <Row key={d.id} d={d} />
-            ))}
-          </div>
+          <>
+            <div className="history">
+              {perPerson.map((n) => (
+                <NetRow key={n.other} n={n} />
+              ))}
+            </div>
+            {/* כשיש כמה חובות מול אותו חבר - הפירוט לפי ערבים */}
+            {mine.length > perPerson.length && (
+              <>
+                <h3 className="section-title">{tr('הפירוט לפי ערבים', 'By night')}</h3>
+                <div className="history">
+                  {mine.map((d) => (
+                    <Row key={d.id} d={d} />
+                  ))}
+                </div>
+              </>
+            )}
+          </>
         ))}
 
         {tab === 'all' && debts && (
@@ -214,7 +301,33 @@ export function Debts({ profile }: { profile: Profile; onBack?: () => void }) {
           </div>
         ))}
         <p className="hint center">{tr('חובות נוצרים אוטומטית כשסוגרים ערב בכסף אמיתי.', 'Debts are created automatically when a real-money night is closed.')}</p>
+        {owedToMe > 0 && <p className="hint center">{tr('הפעמון ליד מי שחייב לך = סבתא של תמיר שולחת לו תזכורת.', "The bell next to someone who owes you = Tamir's Grandma sends a reminder.")}</p>}
       </div>
+      <Sheet
+        open={!!wa}
+        onClose={() => setWa(null)}
+        title={tr('התזכורת לא הגיעה לטלפון', 'The reminder did not reach the phone')}
+        footer={
+          wa && (
+            <a
+              className="btn whatsapp block big"
+              href={`https://wa.me/?text=${encodeURIComponent(`${wa.text}\n${location.origin}${location.pathname}?debts=1`)}`}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => setWa(null)}
+            >
+              <MessageCircle size={18} /> {tr('שליחה בוואטסאפ', 'Send on WhatsApp')}
+            </a>
+          )
+        }
+      >
+        <p className="tk-explain" dir="auto">
+          {tr(`ל${wa?.name ?? ''} אין התראות פעילות. אפשר לשלוח את התזכורת של סבתא בוואטסאפ:`, `${wa?.name ?? ''} has notifications off. You can send Grandma's reminder on WhatsApp:`)}
+        </p>
+        <blockquote className="debt-quote" dir="auto">
+          {wa?.text}
+        </blockquote>
+      </Sheet>
     </div>
   );
 }

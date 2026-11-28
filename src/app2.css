@@ -3175,3 +3175,121 @@ label {
   height: auto !important;
   aspect-ratio: 5 / 7;
 }
+
+/* ---------- יש דיבור? (לובי) ---------- */
+.talk-card {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(201, 162, 74, 0.32);
+  background: var(--surface);
+  color: var(--ivory);
+}
+.tk-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tk-head b {
+  font-weight: 600;
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+.tk-head .sub {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.tk-time {
+  align-self: flex-start;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.tk-answers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+.tk-btn {
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--surface-2);
+  color: var(--ivory);
+  font-size: 14px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+}
+.tk-btn:active {
+  transform: scale(0.97);
+}
+.tk-btn:focus-visible {
+  outline: 2px solid var(--brass-hi);
+  outline-offset: 2px;
+}
+.tk-btn.in.on {
+  background: var(--brass);
+  border-color: var(--brass);
+  color: #1d1408;
+}
+.tk-btn.maybe.on {
+  border-color: var(--brass);
+  color: var(--brass-hi);
+  background: rgba(201, 162, 74, 0.12);
+}
+.tk-btn.no.on {
+  border-color: var(--text-3);
+  color: var(--text-2);
+}
+.tk-n {
+  font-size: 15px;
+  opacity: 0.8;
+}
+.tk-who {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+.tk-who + .tk-who {
+  margin-top: 3px;
+}
+.tk-who-l {
+  color: var(--ivory);
+  font-weight: 600;
+}
+.tk-explain {
+  margin: 0 0 14px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.tk-note {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* ---------- סבתא גובה חובות ---------- */
+.debt-remind {
+  width: 38px;
+  padding: 0;
+  color: var(--brass-hi);
+  flex-shrink: 0;
+}
+.debt-quote {
+  margin: 0;
+  padding: 12px 14px;
+  border-inline-start: 3px solid var(--brass);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 15px;
+  line-height: 1.45;
+}

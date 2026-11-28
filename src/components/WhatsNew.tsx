@@ -1,14 +1,30 @@
 // "מה חדש" - נפתח פעם אחת אחרי עדכון גדול, כדי שהחברים יגלו את השדרוגים
 import { useState } from 'react';
-import { Tv, Share2, Camera, Award, Bot, Eye, Mic, Phone, Volume2, Armchair, Trophy, type LucideIcon } from 'lucide-react';
+import { Tv, Share2, Camera, Award, Bot, Eye, Mic, Phone, Volume2, Armchair, Trophy, MessagesSquare, BellRing, type LucideIcon } from 'lucide-react';
 import { Sheet } from './ui';
 import { useI18n } from '../lib/i18n';
 
 const KEY = 'kj-news';
-const VERSION = '2026-11-28b';
+const VERSION = '2026-11-28c';
 
 // v = באיזה עדכון הפריט נוסף. מי שכבר ראה עדכון קודם רואה רק את מה שנוסף אחריו
 const ITEMS: { v: string; icon: LucideIcon; he: string; en: string; heSub: string; enSub: string; photo?: boolean }[] = [
+  {
+    v: '2026-11-28c',
+    icon: MessagesSquare,
+    he: 'יש דיבור?',
+    en: 'Anything on?',
+    heSub: 'לחיצה אחת בלובי וכל החבורה מקבלת התראה "יש דיבור על ישיבה הערב?". כל אחד עונה בפנים, אולי או לא הפעם, ורואים מי בא.',
+    enSub: 'One tap in the lobby and the whole gang gets "Anything on tonight?". Everyone answers in, maybe or not this time, and you see who is coming.',
+  },
+  {
+    v: '2026-11-28c',
+    icon: BellRing,
+    he: 'סבתא של תמיר גובה חובות',
+    en: "Tamir's Grandma collects debts",
+    heSub: 'בלוח החובות רואים עכשיו את השורה התחתונה מול כל חבר, אחרי קיזוז. הפעמון ליד מי שחייב לך שולח לו תזכורת בקול של סבתא, ו"סגרנו" סוגר הכל בלחיצה.',
+    enSub: "Debts now shows the bottom line with each friend, after netting. The bell next to someone who owes you sends Grandma's reminder, and Settled closes it all in one tap.",
+  },
   {
     v: '2026-11-28b',
     icon: Armchair,

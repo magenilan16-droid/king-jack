@@ -9,6 +9,8 @@ import { fmt, signed } from '../lib/balances';
 import { useI18n, count } from '../lib/i18n';
 import { Sheet, AsyncButton, toast } from '../components/ui';
 import { CreateSheet, type GamePick } from './CreateSheet';
+import { TalkCard } from '../components/TalkCard';
+import { netsByPerson, owedTotals } from '../lib/debtNets';
 import type { RoomState } from '../lib/useRoom';
 
 interface LobbyRoom {
@@ -96,12 +98,8 @@ export function Lobby({
       .select('from_user, to_user, amount')
       .eq('paid', false)
       .or('from_user.eq.' + profile.id + ',to_user.eq.' + profile.id)
-      .then(({ data }) =>
-        setDebt({
-          owe: (data ?? []).filter((d) => d.from_user === profile.id).reduce((a, d) => a + Number(d.amount), 0),
-          owed: (data ?? []).filter((d) => d.to_user === profile.id).reduce((a, d) => a + Number(d.amount), 0),
-        }),
-      );
+      // מקזזים עם כל חבר בנפרד (חייב לו 125 והוא חייב לי 99 = אני חייב לו 26)
+      .then(({ data }) => setDebt(owedTotals(netsByPerson(profile.id, data ?? []))));
   }, [profile.id]);
 
   // הגעה מקישור הזמנה
@@ -223,6 +221,9 @@ export function Lobby({
           </div>
         )}
         {push.sheet}
+
+        {/* יש דיבור? - שואלים את כל החבורה אם יש ישיבה הערב */}
+        <TalkCard myId={profile.id} />
 
         {/* פתיחת שולחן */}
         <div className="section-head">

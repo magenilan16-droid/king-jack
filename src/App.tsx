@@ -46,7 +46,9 @@ export default function App() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [route, setRouteRaw] = useState<Route>(() => {
     const room = readParam(location.href, 'room');
-    return room ? { name: 'table', roomId: room } : { name: 'lobby' };
+    if (room) return { name: 'table', roomId: room };
+    // התראה של סבתא על חוב פותחת את לוח החובות
+    return readParam(location.href, 'debts') ? { name: 'debts' } : { name: 'lobby' };
   });
   const setRoute = useCallback((r: Route) => {
     const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
@@ -63,7 +65,7 @@ export default function App() {
 
   // מנקים את ?join מהכתובת אחרי שקראנו אותו
   useEffect(() => {
-    if (readJoinParam(location.href) || readParam(location.href, 'room')) history.replaceState(null, '', location.pathname);
+    if (['join', 'room', 'debts', 'talk'].some((k) => readParam(location.href, k))) history.replaceState(null, '', location.pathname);
   }, []);
 
   // התחברות
@@ -96,6 +98,8 @@ export default function App() {
         const code = readJoinParam(e.data.url);
         const room = readParam(e.data.url, 'room');
         if (room) setRoute({ name: 'table', roomId: room });
+        else if (readParam(e.data.url, 'debts')) setRoute({ name: 'debts' });
+        else if (readParam(e.data.url, 'talk')) setRoute({ name: 'lobby' });
         else if (code) {
           setPendingJoin(code);
           setRoute({ name: 'lobby' });

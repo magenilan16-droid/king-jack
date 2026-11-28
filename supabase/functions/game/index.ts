@@ -34,6 +34,26 @@ async function ensureVapid(): Promise<boolean> {
 }
 
 type Lang = 'he' | 'en';
+
+// תזכורות חוב בקול של סבתא של תמיר. {d} = מי שחייב, {c} = למי, {a} = כמה
+const DEBT_LINES: Record<Lang, string[]> = {
+  he: [
+    '{d}, סבתא של תמיר מזכירה: ₪{a} ל{c}. אל תהיו פראיירים',
+    'שמעתי לחשושים שעוד לא העברת ₪{a} ל{c}. סבתא לא שוכחת',
+    'סבתא מקבלת ביט ופייבוקס. {c} מחכה ל-₪{a}',
+    '{d}, מה עם התשלומים? ₪{a} ל{c}, בצורה מכבדת',
+    'תת-אלוף סבתא תמיר מודיעה: ₪{a} ל{c} עד הישיבה הבאה',
+    '{d}, סבתא שמה עליך עין. ₪{a} ל{c}, היידה',
+  ],
+  en: [
+    "{d}, Tamir's Grandma reminds you: ₪{a} to {c}. Don't be a sucker",
+    "I heard whispers you still haven't sent ₪{a} to {c}. Grandma never forgets",
+    'Grandma takes Bit and PayBox. {c} is waiting for ₪{a}',
+    '{d}, what about the payments? ₪{a} to {c}, respectfully',
+    'Brigadier General Grandma Tamir announces: ₪{a} to {c} before the next hangout',
+    "{d}, Grandma has her eye on you. ₪{a} to {c}, let's go",
+  ],
+};
 async function pushTo(userIds: string[], make: (lang: Lang) => Record<string, unknown>): Promise<number> {
   if (!userIds.length || !(await ensureVapid())) return 0;
   const [{ data: subs }, { data: profs }] = await Promise.all([
@@ -403,6 +423,68 @@ Deno.serve(async (req) => {
         })),
       );
       return json({ ok: true });
+    }
+
+    // "יש דיבור?" - שואלים את כל החבורה אם יש ישיבה הערב (התראה לכולם, עונים בלובי)
+    if (body.op === 'talk') {
+      const note = String(body.note ?? '').replace(/\s+/g, ' ').trim().slice(0, 60) || null;
+      const { data: last } = await admin.from('game_talks').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (last && Date.now() - new Date(last.created_at).getTime() < 20 * 60000)
+        return json({ error: 'כבר יש דיבור פתוח מלפני כמה דקות - עונים עליו בלובי' }, 429);
+      const { data: talk, error } = await admin.from('game_talks').insert({ from_user: userId, note }).select('id').single();
+      if (error) throw error;
+      await admin.from('game_talk_answers').insert({ talk_id: talk.id, user_id: userId, answer: 'in' });
+      const { data: all } = await admin.from('game_profiles').select('id').neq('id', userId);
+      const to = (all ?? []).map((p: { id: string }) => p.id);
+      background(
+        pushTo(to, (lang) => ({
+          title: lang === 'he' ? '🗣️ יש דיבור?' : '🗣️ Anything on?',
+          body: (lang === 'he' ? `${me.name}: יש דיבור על ישיבה הערב?` : `${me.name}: anything on tonight?`) + (note ? `\n${note}` : ''),
+          url: `./?talk=${talk.id}`,
+          tag: `talk-${talk.id}`,
+        })),
+      );
+      return json({ ok: true, id: talk.id });
+    }
+
+    // "סבתא גובה חובות": מי שחייבים לו שולח לחייב תזכורת בקול של סבתא של תמיר.
+    // הסכום = השורה התחתונה בין שניהם אחרי קיזוז כל החובות הפתוחים (פעם ב-12 שעות לכל זוג)
+    if (body.op === 'debtNudge') {
+      const target = String(body.userId ?? '');
+      if (!/^[0-9a-f-]{36}$/.test(target) || target === userId) return json({ error: 'למי לשלוח?' }, 400);
+      const { data: rows } = await admin
+        .from('game_debts')
+        .select('id, from_user, to_user, amount')
+        .eq('paid', false)
+        .or(`and(from_user.eq.${target},to_user.eq.${userId}),and(from_user.eq.${userId},to_user.eq.${target})`);
+      const net = Math.round((rows ?? []).reduce((a, d) => a + (d.to_user === userId ? 1 : -1) * Number(d.amount), 0) * 100) / 100;
+      if (net <= 0) return json({ error: 'אחרי קיזוז הוא לא חייב לך כלום' }, 400);
+      // התזכורת נרשמת על אחד החובות הפתוחים ביניהם - וכך בודקים "פעם ב-12 שעות לכל זוג"
+      const ids = (rows ?? []).map((d) => d.id);
+      const anchor = (rows ?? []).find((d) => d.to_user === userId)!.id;
+      const { data: last } = await admin
+        .from('game_debt_nudges')
+        .select('created_at')
+        .eq('from_user', userId)
+        .in('debt_id', ids)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (last && Date.now() - new Date(last.created_at).getTime() < 12 * 3600 * 1000)
+        return json({ error: 'סבתא כבר הזכירה לו היום. תנו לו לנשום' }, 429);
+      const { data: debtor } = await admin.from('game_profiles').select('name, lang').eq('id', target).single();
+      if (!debtor) return json({ error: 'החבר לא נמצא' }, 404);
+      const amount = String(net);
+      const i = Math.floor(Math.random() * DEBT_LINES.he.length);
+      const line = (lang: Lang) => DEBT_LINES[lang][i].replaceAll('{d}', debtor.name).replaceAll('{c}', me.name).replaceAll('{a}', amount);
+      await admin.from('game_debt_nudges').insert({ debt_id: anchor, from_user: userId });
+      const pushed = await pushTo([target], (lang) => ({
+        title: lang === 'he' ? '👵 סבתא של תמיר' : "👵 Tamir's Grandma",
+        body: line(lang),
+        url: './?debts=1',
+        tag: `debt-${userId}`,
+      }));
+      return json({ ok: true, pushed, name: debtor.name, text: line(debtor.lang === 'en' ? 'en' : 'he') });
     }
 
     // שיחה בשולחן: רק מי שיושב מקבל את הערוץ הסודי ואת שרתי הממסר
